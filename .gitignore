@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+*.db
+*.db-*
+*.sqlite
+node_modules/
+.next/
+.vercel/
+*.pem
+*.key
