@@ -89,3 +89,25 @@ INSERT INTO role_permissions(role, permission) VALUES
  ('parent','own_profile.read'),('parent','own_contacts.read'),('parent','child_profile.read'),('parent','child_lessons.read'),('parent','consent.grant'),('parent','child_lessons.enroll'),('parent','message.receive'),
  ('teacher','own_lessons.read'),('teacher','lesson_students.read'),('teacher','message.send'),
  ('owner','own_profile.read'),('owner','own_contacts.read'),('owner','contacts.read_any'),('owner','students.read_all'),('owner','audit.read'),('owner','lessons.enroll'),('owner','message.send');
+
+-- Ф2: вход. Отдельно от contact_vault. Пароль — только хеш со своей солью и параметрами в строке.
+CREATE TABLE credentials (
+  user_id       INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  login         TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL
+);
+-- сессии: токен НЕ хранится, только sha256-хеш; время — миллисекунды unix
+CREATE TABLE sessions (
+  token_hash TEXT PRIMARY KEY,
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL
+);
+-- попытки входа (для ограничения); ключ — введённый логин, существует он или нет
+CREATE TABLE login_attempts (
+  id    INTEGER PRIMARY KEY,
+  login TEXT NOT NULL,
+  ts    INTEGER NOT NULL,
+  ok    INTEGER NOT NULL
+);
+CREATE INDEX login_attempts_idx ON login_attempts(login, ts);
