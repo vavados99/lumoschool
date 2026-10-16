@@ -46,14 +46,21 @@ CREATE TABLE parental_consents (
 CREATE TABLE lessons (
   id         INTEGER PRIMARY KEY,
   teacher_id INTEGER NOT NULL REFERENCES users(id),
-  starts_at  TEXT NOT NULL,
-  status     TEXT NOT NULL DEFAULT 'planned'
+  starts_at  TEXT NOT NULL,            -- ISO UTC (Ф3: createSlot нормализует в toISOString)
+  status     TEXT NOT NULL DEFAULT 'planned' CHECK (status IN ('planned','cancelled','done')),
+  duration_min INTEGER NOT NULL DEFAULT 50 CHECK (duration_min BETWEEN 15 AND 180),  -- Ф3
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE TABLE lesson_enrollments (
   lesson_id  INTEGER NOT NULL REFERENCES lessons(id),
   student_id INTEGER NOT NULL REFERENCES users(id),
+  booked_by  INTEGER REFERENCES users(id),                                   -- Ф3: кто записал
+  status     TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','cancelled')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  cancelled_at TEXT,
   PRIMARY KEY (lesson_id, student_id)
 );
+CREATE INDEX lessons_teacher_idx ON lessons(teacher_id, starts_at);
 
 -- «запрещено по умолчанию»: разрешено только то, что есть в этой таблице
 CREATE TABLE role_permissions (
@@ -85,10 +92,10 @@ CREATE TRIGGER audit_no_delete BEFORE DELETE ON audit_log BEGIN SELECT RAISE(ABO
 
 -- матрица прав (план этапа 0, раздел 5)
 INSERT INTO role_permissions(role, permission) VALUES
- ('student','own_profile.read'),('student','own_lessons.read'),('student','own_contacts.read'),
- ('parent','own_profile.read'),('parent','own_contacts.read'),('parent','child_profile.read'),('parent','child_lessons.read'),('parent','consent.grant'),('parent','child_lessons.enroll'),('parent','message.receive'),
- ('teacher','own_lessons.read'),('teacher','lesson_students.read'),('teacher','message.send'),
- ('owner','own_profile.read'),('owner','own_contacts.read'),('owner','contacts.read_any'),('owner','students.read_all'),('owner','audit.read'),('owner','lessons.enroll'),('owner','message.send');
+ ('student','own_profile.read'),('student','own_lessons.read'),('student','own_contacts.read'),('student','lessons.enroll'),('student','lessons.cancel'),
+ ('parent','own_profile.read'),('parent','own_contacts.read'),('parent','child_profile.read'),('parent','child_lessons.read'),('parent','consent.grant'),('parent','child_lessons.enroll'),('parent','child_lessons.cancel'),('parent','message.receive'),
+ ('teacher','own_lessons.read'),('teacher','slots.create'),('teacher','lesson_students.read'),('teacher','message.send'),
+ ('owner','own_profile.read'),('owner','own_contacts.read'),('owner','contacts.read_any'),('owner','students.read_all'),('owner','audit.read'),('owner','lessons.enroll'),('owner','lessons.cancel'),('owner','lessons.read_all'),('owner','message.send');
 
 -- Ф2: вход. Отдельно от contact_vault. Пароль — только хеш со своей солью и параметрами в строке.
 CREATE TABLE credentials (

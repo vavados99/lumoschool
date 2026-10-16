@@ -23,7 +23,7 @@ export function seed(): { db: DatabaseSync; ids: Record<string, number> } {
   };
   const pc = db.prepare('INSERT INTO parent_child(parent_id, child_id) VALUES (?,?)');
   pc.run(ids.parentA, ids.kidA); pc.run(ids.parentB, ids.kidB);
-  const lesson = (t: number) => Number(db.prepare(`INSERT INTO lessons(teacher_id, starts_at) VALUES (?, '2026-11-01T10:00')`).run(t).lastInsertRowid);
+  const lesson = (t: number) => Number(db.prepare(`INSERT INTO lessons(teacher_id, starts_at) VALUES (?, '2099-01-01T10:00:00.000Z')`).run(t).lastInsertRowid);
   ids.lessonA = lesson(ids.teacherA); ids.lessonB = lesson(ids.teacherB);
   const en = db.prepare('INSERT INTO lesson_enrollments(lesson_id, student_id) VALUES (?,?)');
   en.run(ids.lessonA, ids.kidA); en.run(ids.lessonB, ids.kidB); en.run(ids.lessonB, ids.adultC);

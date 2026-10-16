@@ -15,12 +15,12 @@ export function actorOf(db: DatabaseSync, userId: number): Actor {
   return { id: r.id, role: r.role };
 }
 
-function audit(db: DatabaseSync, a: Actor | null, action: string, tt: string | null, tid: number | null, outcome: 'allowed' | 'denied') {
+export function audit(db: DatabaseSync, a: Actor | null, action: string, tt: string | null, tid: number | null, outcome: 'allowed' | 'denied') {
   db.prepare('INSERT INTO audit_log(actor_id, action, target_type, target_id, outcome) VALUES (?,?,?,?,?)')
     .run(a?.id ?? null, action, tt, tid, outcome);
 }
 
-function guard(db: DatabaseSync, a: Actor, perm: string, tt: string | null, tid: number | null, ownershipOk: () => boolean) {
+export function guard(db: DatabaseSync, a: Actor, perm: string, tt: string | null, tid: number | null, ownershipOk: () => boolean) {
   const has = db.prepare('SELECT 1 FROM role_permissions WHERE role = ? AND permission = ?').get(a.role, perm);
   if (!has || !ownershipOk()) {
     audit(db, a, perm, tt, tid, 'denied');
@@ -34,7 +34,7 @@ const yes = () => true;
 function teacherSharesLesson(db: DatabaseSync, teacherId: number, studentId: number): boolean {
   return !!db.prepare(
     `SELECT 1 FROM lessons l JOIN lesson_enrollments e ON e.lesson_id = l.id
-     WHERE l.teacher_id = ? AND e.student_id = ?`).get(teacherId, studentId);
+     WHERE l.teacher_id = ? AND e.student_id = ? AND e.status = 'active'`).get(teacherId, studentId);
 }
 function isParentOf(db: DatabaseSync, parentId: number, childId: number): boolean {
   return !!db.prepare('SELECT 1 FROM parent_child WHERE parent_id = ? AND child_id = ?').get(parentId, childId);
@@ -76,7 +76,7 @@ export function listStudents(db: DatabaseSync, a: Actor): Profile[] {
     case 'owner': return db.prepare(`${base} ORDER BY u.id`).all() as Profile[];
     case 'teacher': return db.prepare(
       `${base} JOIN lesson_enrollments e ON e.student_id = u.id JOIN lessons l ON l.id = e.lesson_id
-       WHERE l.teacher_id = ? ORDER BY u.id`).all(a.id) as Profile[];
+       WHERE l.teacher_id = ? AND e.status = 'active' ORDER BY u.id`).all(a.id) as Profile[];
     case 'parent': return db.prepare(
       `${base} JOIN parent_child pc ON pc.child_id = u.id WHERE pc.parent_id = ? ORDER BY u.id`).all(a.id) as Profile[];
     case 'student': return db.prepare(`${base} WHERE u.id = ?`).all(a.id) as Profile[];
@@ -102,15 +102,51 @@ export function hasActiveConsent(db: DatabaseSync, childId: number): boolean {
   return !!db.prepare('SELECT 1 FROM parental_consents WHERE child_id = ? AND revoked_at IS NULL').get(childId);
 }
 
-/** Запись на урок. Ребёнок до 16 без активного согласия родителя — нельзя. */
-export function enroll(db: DatabaseSync, a: Actor, lessonId: number, studentId: number) {
+export class ScheduleError extends Error {
+  constructor(msg: string) { super(msg); this.name = 'ScheduleError'; }
+}
+export const toMs = (iso: string) => Date.parse(/(Z|[+-]\d\d:?\d\d)$/.test(iso) ? iso : iso + 'Z');
+
+/** Запись на урок. Правила: право роли; «своё» (родитель — только свой ребёнок; ученик — только себя и только 16+);
+ *  согласие родителя до 16; урок существует, не отменён, не в прошлом; двойная запись — отказ. */
+export function enroll(db: DatabaseSync, a: Actor, lessonId: number, studentId: number, now = Date.now()) {
   const perm = a.role === 'parent' ? 'child_lessons.enroll' : 'lessons.enroll';
-  guard(db, a, perm, 'lesson', lessonId, () => a.role !== 'parent' || isParentOf(db, a.id, studentId));
-  if (isMinor(db, studentId) && !hasActiveConsent(db, studentId)) {
+  const own = () => a.role === 'parent' ? isParentOf(db, a.id, studentId)
+    : a.role === 'student' ? a.id === studentId && !isMinor(db, studentId, new Date(now)) : true;
+  guard(db, a, perm, 'lesson', lessonId, own);
+  const refuse = (action: string, msg: string): never => {
+    audit(db, a, action, 'lesson', lessonId, 'denied');
+    throw new ScheduleError(msg);
+  };
+  const st = db.prepare('SELECT 1 FROM students WHERE user_id = ?').get(studentId);
+  if (!st) refuse('enroll.not_student', 'target is not a student');
+  if (isMinor(db, studentId, new Date(now)) && !hasActiveConsent(db, studentId)) {
     audit(db, a, 'enroll.no_consent', 'student', studentId, 'denied');
     throw new Denied('no parental consent');
   }
-  db.prepare('INSERT OR IGNORE INTO lesson_enrollments(lesson_id, student_id) VALUES (?,?)').run(lessonId, studentId);
+  const l = db.prepare('SELECT starts_at, status FROM lessons WHERE id = ?').get(lessonId) as { starts_at: string; status: string } | undefined;
+  if (!l || l.status !== 'planned') refuse('enroll.no_lesson', 'lesson not available');
+  if (toMs(l!.starts_at) <= now) refuse('enroll.past', 'lesson is in the past');
+  const ex = db.prepare('SELECT status FROM lesson_enrollments WHERE lesson_id = ? AND student_id = ?').get(lessonId, studentId) as { status: string } | undefined;
+  if (ex?.status === 'active') refuse('enroll.duplicate', 'already enrolled');
+  if (ex) db.prepare(`UPDATE lesson_enrollments SET status='active', booked_by=?, cancelled_at=NULL WHERE lesson_id=? AND student_id=?`).run(a.id, lessonId, studentId);
+  else db.prepare('INSERT INTO lesson_enrollments(lesson_id, student_id, booked_by) VALUES (?,?,?)').run(lessonId, studentId, a.id);
+  audit(db, a, 'enroll.done', 'lesson', lessonId, 'allowed');
+}
+
+/** Отмена записи: родитель — своего ребёнка, ученик — свою, владелец — любую; преподаватель — нет. */
+export function cancelEnrollment(db: DatabaseSync, a: Actor, lessonId: number, studentId: number, now = Date.now()) {
+  const perm = a.role === 'parent' ? 'child_lessons.cancel' : 'lessons.cancel';
+  const own = () => a.role === 'parent' ? isParentOf(db, a.id, studentId) : a.role === 'student' ? a.id === studentId : true;
+  guard(db, a, perm, 'lesson', lessonId, own);
+  const r = db.prepare(`SELECT e.status, l.starts_at FROM lesson_enrollments e JOIN lessons l ON l.id = e.lesson_id
+    WHERE e.lesson_id = ? AND e.student_id = ?`).get(lessonId, studentId) as { status: string; starts_at: string } | undefined;
+  if (!r || r.status !== 'active' || toMs(r.starts_at) <= now) {
+    audit(db, a, 'cancel.refused', 'lesson', lessonId, 'denied');
+    throw new ScheduleError('no active future enrollment');
+  }
+  db.prepare(`UPDATE lesson_enrollments SET status='cancelled', cancelled_at=datetime('now') WHERE lesson_id=? AND student_id=?`).run(lessonId, studentId);
+  audit(db, a, 'cancel.done', 'lesson', lessonId, 'allowed');
 }
 
 /** Сообщения. Преподаватель → несовершеннолетнему напрямую нельзя: только через родителя. */
@@ -123,7 +159,7 @@ export function sendMessage(db: DatabaseSync, a: Actor, toId: number, body: stri
     if (to.role === 'parent') {
       return !!db.prepare(
         `SELECT 1 FROM parent_child pc JOIN lesson_enrollments e ON e.student_id = pc.child_id
-         JOIN lessons l ON l.id = e.lesson_id WHERE pc.parent_id = ? AND l.teacher_id = ?`).get(toId, a.id);
+         JOIN lessons l ON l.id = e.lesson_id WHERE pc.parent_id = ? AND l.teacher_id = ? AND e.status = 'active'`).get(toId, a.id);
     }
     if (to.role === 'student') return !isMinor(db, toId) && teacherSharesLesson(db, a.id, toId);
     return false;
