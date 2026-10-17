@@ -9,3 +9,9 @@ node_modules/
 .vercel/
 *.pem
 *.key
+
+# бэкапы базы (данные детей) — никогда в репозиторий
+backups/
+*.bak
+lumo-backup-*
+*.pre-restore-*

@@ -8,6 +8,9 @@ const MIGRATIONS = [
   new URL('../db/migrations/002-room.sql', import.meta.url),  // v2: Ф9 комната урока
 ];
 
+/** Версия схемы, которую знает этот код (= число миграций). */
+export const SCHEMA_VERSION = MIGRATIONS.length;
+
 const version = (db: DatabaseSync) => Number((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version);
 
 /** Путь к базе — из окружения (DATABASE_PATH); ':memory:' для тестов. */

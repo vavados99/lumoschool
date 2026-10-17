@@ -6,6 +6,9 @@
   "scripts": {
     "test": "node --test test/*.test.ts",
     "start": "node src/server.ts",
-    "seed": "node src/seed.ts"
+    "seed": "node src/seed.ts",
+    "backup": "node src/backup.ts",
+    "restore": "node src/restore.ts",
+    "maintenance": "node src/maintenance.ts"
   }
 }
