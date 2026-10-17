@@ -130,3 +130,26 @@ CREATE TABLE settings (
   value TEXT NOT NULL
 );
 INSERT INTO settings(key, value) VALUES ('cancel_window_hours', '24');
+
+-- Ф6: сообщения внутри платформы. Ветка = преподаватель + ученик (+ родители ребёнка, вычисляются по parent_child).
+-- Прав владельца читать личные сообщения НЕТ по умолчанию: 'message.read_any' в матрице отсутствует (выдача = строка в role_permissions).
+CREATE TABLE msg_threads (
+  id         INTEGER PRIMARY KEY,
+  teacher_id INTEGER NOT NULL REFERENCES users(id),
+  student_id INTEGER NOT NULL REFERENCES users(id),
+  created_by INTEGER NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (teacher_id, student_id)
+);
+CREATE TABLE msg_posts (
+  id         INTEGER PRIMARY KEY,
+  thread_id  INTEGER NOT NULL REFERENCES msg_threads(id),
+  from_id    INTEGER NOT NULL REFERENCES users(id),
+  body       TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX msg_posts_thread_idx ON msg_posts(thread_id, id);
+INSERT INTO role_permissions(role, permission) VALUES
+ ('student','message.thread.send'),('student','message.thread.read'),
+ ('parent','message.thread.send'),('parent','message.thread.read'),
+ ('teacher','message.thread.send'),('teacher','message.thread.read');
