@@ -1,4 +1,4 @@
-/* LUMOSCHOOL · B3 «Світло». Ванільний JS без збірки.
+/* LUMOSCHOOL · B4 «Темрява». Ванільний JS без збірки.
    Люмо — вектор (SVG) з власним «ригом»: очі, повіки, брови, рот, руки, стиснення-розтягнення, дихання.
    Усі параметри плавно (300–500 мс) тягнуться до цілі настрою; світло сцени і літери заголовка рахуються від позиції ядра. */
 (() => {
@@ -20,15 +20,17 @@ const UI = {
   ru: { cta:'Записаться на урок', code:'RU', trial:'Пробный урок', kicker:'Английский', a:'с другом,', b:'который светится', lead:'Онлайн-уроки для детей, подростков и взрослых.', cue:'Прокрути — он заметит', mood:'Настроение', moods:['Покой','Радость','Любопытство','Раздумье','Праздник','Сон'], alt:'Люмо — живой друг, который светится', listLabel:'Язык сайта' }
 };
 const LINES = {
-  uk: { stub:'Тут буде запис на пробний урок. Це заглушка.', hello:'Привіт! Я Люмо. Можна мене торкнутись.', joy:'Ой, приємно! Тепло від твоєї руки.', curious:'Ммм, а що там угорі?', think:'Гм… дай подумати.', sleepy:'Я трошки задрімав… торкнись — прокинусь.', wake:'О, я тут! Радий, що ти повернувся.', celebrate:'Ура! Так весело, що підстрибнув!' },
-  pl: { stub:'Tu będzie zapis na lekcję próbną. To makieta.', hello:'Cześć! Jestem Lumo. Możesz mnie dotknąć.', joy:'Ojej, miło! Ciepło od twojej ręki.', curious:'Mmm, co tam jest u góry?', think:'Hm… daj mi pomyśleć.', sleepy:'Chwilkę przysnąłem… dotknij — obudzę się.', wake:'O, jestem! Cieszę się, że wróciłeś.', celebrate:'Hura! Tak wesoło, że podskoczyłem!' },
-  en: { stub:'Trial-lesson booking will live here. Placeholder.', hello:"Hi! I'm Lumo. You can touch me.", joy:'Aw, nice! Your hand is warm.', curious:"Mmm, what's up there?", think:'Hm… let me think.', sleepy:"I dozed off a little… touch me — I'll wake up.", wake:"Oh, I'm here! Glad you're back.", celebrate:'Yay! So much fun I jumped!' },
-  de: { stub:'Hier kommt die Anmeldung zur Probestunde. Platzhalter.', hello:'Hallo! Ich bin Lumo. Du darfst mich anfassen.', joy:'Oh, wie schön! Deine Hand ist warm.', curious:'Mmm, was ist da oben?', think:'Hm… lass mich überlegen.', sleepy:'Ich bin kurz eingenickt… tipp mich an.', wake:'Oh, ich bin da! Schön, dass du zurück bist.', celebrate:'Juhu! So viel Freude, ich musste hüpfen!' },
-  cs: { stub:'Tady bude zápis na zkušební hodinu. Zástupný text.', hello:'Ahoj! Jsem Lumo. Můžeš se mě dotknout.', joy:'Jé, to je příjemné! Máš teplou ruku.', curious:'Mmm, co je tam nahoře?', think:'Hm… nech mě přemýšlet.', sleepy:'Trochu jsem usnul… dotkni se mě.', wake:'Jé, jsem tu! Rád tě zase vidím.', celebrate:'Hurá! Tolik radosti, že jsem vyskočil!' },
-  ru: { stub:'Здесь будет запись на пробный урок. Это заглушка.', hello:'Привет! Я Люмо. Меня можно потрогать.', joy:'Ой, приятно! Рука у тебя тёплая.', curious:'Ммм, а что там наверху?', think:'Гм… дай подумать.', sleepy:'Я немножко задремал… коснись — проснусь.', wake:'О, я тут! Рад, что ты вернулся.', celebrate:'Ура! Так весело, что подпрыгнул!' }
+  uk: { stub:'Тут буде запис на пробний урок. Це заглушка.', hello:'Натисни на мене', helloM:'Торкнись мене', joy:'Ой, приємно! Яке тепле світло.', curious:'Ммм, а що там угорі?', think:'Гм… дай подумати.', sleepy:'Ш-ш… Люмо дрімає. Торкнись, щоб розбудити', wake:'О, я тут! Радий, що ти повернувся.', celebrate:'Ура! Так весело, що підстрибнув!' },
+  pl: { stub:'Tu będzie zapis na lekcję próbną. To makieta.', hello:'Kliknij mnie', helloM:'Dotknij mnie', joy:'Ojej, miło! Jak ciepło.', curious:'Mmm, co tam jest u góry?', think:'Hm… daj mi pomyśleć.', sleepy:'Ciii… Lumo drzemie. Dotknij, żeby go obudzić', wake:'O, jestem! Cieszę się, że wróciłeś.', celebrate:'Hura! Tak wesoło, że podskoczyłem!' },
+  en: { stub:'Trial-lesson booking will live here. Placeholder.', hello:'Click me', helloM:'Tap me', joy:'Aw, nice! So warm.', curious:"Mmm, what's up there?", think:'Hm… let me think.', sleepy:'Shh… Lumo is napping. Tap to wake him', wake:"Oh, I'm here! Glad you're back.", celebrate:'Yay! So much fun I jumped!' },
+  de: { stub:'Hier kommt die Anmeldung zur Probestunde. Platzhalter.', hello:'Klick mich an', helloM:'Tipp mich an', joy:'Oh, wie schön! So warm.', curious:'Mmm, was ist da oben?', think:'Hm… lass mich überlegen.', sleepy:'Psst… Lumo schläft. Tipp ihn an, um ihn zu wecken', wake:'Oh, ich bin da! Schön, dass du zurück bist.', celebrate:'Juhu! So viel Freude, ich musste hüpfen!' },
+  cs: { stub:'Tady bude zápis na zkušební hodinu. Zástupný text.', hello:'Klikni na mě', helloM:'Dotkni se mě', joy:'Jé, to je příjemné! Jak teplo.', curious:'Mmm, co je tam nahoře?', think:'Hm… nech mě přemýšlet.', sleepy:'Pšt… Lumo dřímá. Dotkni se, aby se probudil', wake:'Jé, jsem tu! Rád tě zase vidím.', celebrate:'Hurá! Tolik radosti, že jsem vyskočil!' },
+  ru: { stub:'Здесь будет запись на пробный урок. Это заглушка.', hello:'Нажми на меня', helloM:'Коснись меня', joy:'Ой, приятно! Какой тёплый свет.', curious:'Ммм, а что там наверху?', think:'Гм… дай подумать.', sleepy:'Тсс… Люмо дремлет. Коснись, чтобы разбудить', wake:'О, я тут! Рад, что ты вернулся.', celebrate:'Ура! Так весело, что подпрыгнул!' }
 };
 let lang = 'uk';
 const U = () => UI[lang], L = () => LINES[lang];
+const isTouchUI = () => matchMedia('(pointer: coarse)').matches || innerWidth <= 820;
+const lineFor = key => key === 'hello' ? (isTouchUI() ? L().helloM : L().hello) : L()[key];
 
 
 /* ================= ЗАГОЛОВОК: літери для підсвічування ================= */
@@ -68,18 +70,19 @@ const g = id => document.getElementById(id);
 const el = { rig:g('rig'), squash:g('squash'), tilt:g('tilt'), face:g('face'), armL:g('armL'), armR:g('armR'),
   browL:g('browL'), browR:g('browR'), eyeL:g('eyeL'), eyeR:g('eyeR'), eyeLin:g('eyeLin'), eyeRin:g('eyeRin'), lidL:g('lidL'), lidR:g('lidR'),
   happyL:g('happyL'), happyR:g('happyR'), mouthFill:g('mouthFill'), mouthLine:g('mouthLine'), mouthClip:g('mouthClipPath'), tongue:g('tongue'), mouthG:g('mouthG'),
-  coreG:g('coreG'), coreDisc:g('coreDisc'), innerGlow:g('innerGlow'), innerGlow2:g('innerGlow2'), spark:g('spark'), zzz:g('zzz'),
-  stars: [...document.querySelectorAll('.star')], svg:g('lumo'), light:g('light'), pool:g('pool'), contact:g('contact') };
-const EYE = { L:[158, 262], R:[248, 262] };
+  coreG:g('coreG'), coreDisc:g('coreDisc'), innerGlow:g('innerGlow'), innerGlow2:g('innerGlow2'), zzz:g('zzz'),
+  lowL:g('lowL'), lowR:g('lowR'), cheekL:g('cheekL'), cheekR:g('cheekR'), fins:[...document.querySelectorAll('.finRim')], svg:g('lumo'), light:g('light'), pool:g('pool') };
+const EYE = { L:[158, 300], R:[248, 300] };   // обличчя опущене ≈ на 8–10 % висоти тіла
 
 /* Цілі настроїв. gx/gy = null → дивиться за курсором. */
 const E = {
-  idle:      { lidL:.05, lidR:.05, tiltL:0, tiltR:0, happy:0, gx:null, gy:null, pupil:1, mw:26, mc:26, mo:0,   mt:0, ms:0, bLy:0,  bRy:0,  bLa:0,  bRa:0,  tilt:0, sy:1, armL:24, armR:24, core:.85, spark:0, zzz:0, lp:1,   lift:0, sat:1,   star:1, mx:0 },
-  joy:       { lidL:.14, lidR:.14, tiltL:0, tiltR:0, happy:0, gx:null, gy:null, pupil:1, mw:26, mc:40, mo:.22, mt:0, ms:0, bLy:-9, bRy:-9, bLa:-6, bRa:-6, tilt:0, sy:1, armL:54, armR:54, core:1.15,spark:0, zzz:0, lp:1.2, lift:0, sat:1.05,star:1, mx:0 },
-  curious:   { lidL:0,   lidR:0,   tiltL:0, tiltR:0, happy:0, gx:.32,  gy:-1,   pupil:1, mw:26, mc:12, mo:.14, mt:0, ms:0, bLy:-14,bRy:-6, bLa:-8, bRa:-8, tilt:0, sy:1, armL:40, armR:18, core:.95, spark:0, zzz:0, lp:1.05,lift:0, sat:1,   star:1, mx:0 },
-  think:     { lidL:.3,  lidR:.3,  tiltL:-3,tiltR:3, happy:0, gx:-.9,  gy:-.85, pupil:1, mw:26, mc:6,  mo:0,   mt:-4,ms:0, bLy:-4, bRy:-9, bLa:6,  bRa:0,  tilt:0, sy:1, armL:10, armR:10, core:.5,  spark:1, zzz:0, lp:.6,  lift:0, sat:.85, star:0, mx:0 },
-  celebrate: { lidL:0,   lidR:0,   tiltL:0, tiltR:0, happy:0, gx:0,     gy:0,    pupil:1, mw:26, mc:44, mo:.5,  mt:0, ms:0, bLy:-12,bRy:-12,bLa:-6, bRa:6,  tilt:0, sy:1, armL:158,armR:150,core:1.5, spark:0, zzz:0, lp:1.7, lift:0, sat:1.1, star:1, mx:0 },
-  sleepy:    { lidL:1,   lidR:1,   tiltL:4, tiltR:-4,happy:0, gx:0,     gy:.55,  pupil:1, mw:26, mc:16, mo:0,   mt:0, ms:0, bLy:8,  bRy:8,  bLa:-6, bRa:-6, tilt:0, sy:1, armL:14, armR:14, core:.55, spark:0, zzz:1, lp:.62, lift:0, sat:.9,  star:1, mx:0 }
+  // bright — яскравість світла сцени (емоція); low — нижні повіки (частка ока); cheek — рум'янець
+  idle:      { lidL:.05, lidR:.05, tiltL:0, tiltR:0, happy:0, gx:null, gy:null, pupil:1, mw:26, mc:26, mo:0,   mt:0,  ms:0, bLy:0,  bRy:0,  bLa:0,  bRa:0,  tilt:0, sy:1, armL:24, armR:24, core:.85, zzz:0, bright:.6,  low:0,   cheek:0,  mx:0  },
+  joy:       { lidL:.04, lidR:.04, tiltL:0, tiltR:0, happy:0, gx:null, gy:null, pupil:1, mw:36, mc:40, mo:.22, mt:0,  ms:0, bLy:-9, bRy:-9, bLa:-6, bRa:-6, tilt:0, sy:1, armL:54, armR:54, core:1.1, zzz:0, bright:.85, low:.35, cheek:1,  mx:0  },
+  curious:   { lidL:0,   lidR:0,   tiltL:0, tiltR:0, happy:0, gx:.32,  gy:-1,   pupil:1, mw:26, mc:12, mo:.14, mt:0,  ms:0, bLy:-14,bRy:-6, bLa:-8, bRa:-8, tilt:0, sy:1, armL:40, armR:18, core:.95, zzz:0, bright:.7,  low:0,   cheek:0,  mx:0  },
+  think:     { lidL:.18, lidR:.1,  tiltL:-3,tiltR:3, happy:0, gx:-.9,  gy:-.85, pupil:1, mw:20, mc:3,  mo:0,   mt:3,  ms:0, bLy:-2, bRy:-13,bLa:8,  bRa:-2, tilt:-3,sy:1, armL:10, armR:10, core:.55, zzz:0, bright:.5,  low:0,   cheek:0,  mx:16 },
+  celebrate: { lidL:0,   lidR:0,   tiltL:0, tiltR:0, happy:0, gx:0,     gy:0,    pupil:1, mw:38, mc:44, mo:.5,  mt:0,  ms:0, bLy:-12,bRy:-12,bLa:-6, bRa:-6, tilt:0, sy:1, armL:120, armR:120, core:1.4, zzz:0, bright:1,   low:.12, cheek:1,  mx:0  },
+  sleepy:    { lidL:1,   lidR:1,   tiltL:0, tiltR:0, happy:0, gx:0,     gy:.55,  pupil:1, mw:24, mc:14, mo:0,   mt:0,  ms:0, bLy:24, bRy:24, bLa:8,  bRa:8,  tilt:0, sy:1, armL:14, armR:14, core:.5,  zzz:1, bright:.25, low:0,   cheek:0,  mx:0  }
 };
 const KEYS = Object.keys(E.idle);
 const cur = {}, tgt = {};
@@ -87,7 +90,7 @@ for (const k of KEYS) cur[k] = tgt[k] = E.idle[k] === null ? 0 : E.idle[k];
 cur.gx = cur.gy = tgt.gx = tgt.gy = 0;
 
 let emo = 'idle', pinned = false, backT = 0, lastAct = performance.now();
-const lay = { blink:0, wave:0, jumpT:-1, lookX:0, lookY:0, pointerAt:-1e9, px:0, py:0, glanceX:0, glanceY:0, glanceUntil:0, nextGlance:0, startled:0 };
+const lay = { pop:-1, flash:0, blink:0, wave:0, jumpT:-1, lookX:0, lookY:0, pointerAt:-1e9, px:0, py:0, glanceX:0, glanceY:0, glanceUntil:0, nextGlance:0, startled:0 };
 
 function setEmo(name, { hold = 0, pin = false } = {}) {
   if (!E[name]) return;
@@ -95,10 +98,13 @@ function setEmo(name, { hold = 0, pin = false } = {}) {
   emo = name; hero.dataset.emo = name; pinned = pin;
   Object.assign(tgt, E[name]);
   if (E[name].gx === null) { tgt.gx = lay.lookX; tgt.gy = lay.lookY; }
+  if (name === 'joy' && !RM) lay.pop = 0;                       // стиснення-розтягнення 0.94 / 1.06 за 220 мс
+  if (name === 'celebrate' && !RM) { lay.jumpT = 0; lay.flash = 1; setTimeout(() => { if (emo === 'celebrate') burst(); }, 120); }
   
   $$('#moods button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.emo === name)));
   if (hold) backT = setTimeout(() => setEmo(name === 'celebrate' ? 'joy' : 'idle', name === 'celebrate' ? { hold: 2200 } : {}), hold);
   if (RM) { Object.assign(cur, tgt); lay.jumpT = -1; draw(0, true); }
+  if (RM && name === 'celebrate') burst();
 }
 
 /* --- рот: квадратичні криві. mo — наскільки відкритий. --- */
@@ -126,19 +132,23 @@ function draw(dt, still) {
   }
   for (const key of KEYS) cur[key] += (tgt[key] - cur[key]) * k;
 
-  // дихання (повільне, у сні — глибше й повільніше)
+  // дихання у сні: масштаб 1 → 1.03 за 3.2 с (період 6.4 с)
   const sleepy = emo === 'sleepy';
-  const br = RM ? 0 : Math.sin(t * Math.PI * 2 / (sleepy ? 6.2 : 4.2));
-  const brAmp = 0;
-  let sy = cur.sy * (1 + brAmp * br), y = 0, sxMul = 1;
-  // стрибок (свято): присідання → розтягнення → приземлення
+  const br = RM ? 0 : Math.sin(t * Math.PI * 2 / 4.2);
+  const breath = sleepy && !RM ? .03 * (.5 - .5 * Math.cos(t * Math.PI * 2 / 6.4)) : 0;
+  let sy = cur.sy * (1 + breath), y = 0, sxMul = 1;
+  // радість: «поп» 0.94 → 1.06 за 220 мс
+  if (lay.pop >= 0 && !RM) { lay.pop += dt; const p = lay.pop / .22; if (p >= 1) lay.pop = -1; else sy *= 1 - .06 * Math.sin(p * Math.PI * 2); }
+  // свято: стрибок −24 px за 380 мс (easeOutBack з перельотом), падіння 340 мс, 3 стрибки
   if (lay.jumpT >= 0 && !RM) {
     lay.jumpT += dt;
-    const P = 1.15, p = (lay.jumpT % P) / P;
-    if (lay.jumpT > 3.4) lay.jumpT = -1;
-    else if (p < .18) { const q = p / .18; sy *= 1 - .13 * Math.sin(q * Math.PI / 2); }
-    else if (p < .72) { const q = (p - .18) / .54; y = -Math.sin(q * Math.PI) * 40; sy *= 1 + .1 * Math.sin(q * Math.PI); }
-    else if (p < .86) { const q = (p - .72) / .14; sy *= 1 - .11 * Math.sin(q * Math.PI); }
+    if (lay.jumpT > 3.3) lay.jumpT = -1;
+    else {
+      const P = 1.1, tt = lay.jumpT % P, H = 24;
+      if (tt < .38) { const q = tt / .38 - 1, c1 = 1.70158, c3 = c1 + 1; y = -H * (1 + c3 * q * q * q + c1 * q * q); sy *= 1 + .06 * Math.sin(tt / .38 * Math.PI); }
+      else if (tt < .72) { const q = (tt - .38) / .34; y = -H * (1 - q * q); }
+      else if (tt < .86) { const q = (tt - .72) / .14; sy *= 1 - .08 * Math.sin(q * Math.PI); }
+    }
   }
   const sx = (1 / Math.sqrt(sy)) * sxMul;
   const sway = RM ? 0 : Math.sin(t * .9) * .7;
@@ -154,70 +164,69 @@ function draw(dt, still) {
   set(el.face, 'transform', `translate(${(cur.gx * 8).toFixed(2)} ${(cur.gy * 6).toFixed(2)})`);
   const gx = cur.gx * 12, gy = cur.gy * 11, pu = cur.pupil;
   const eyeOp = clamp(1 - cur.happy * 1.4, 0, 1);
-  const kk = clamp(cur.core * .7, 0, 1), lidFill = `rgb(${Math.round(94 + 44 * kk)} ${Math.round(53 + 14 * kk)} ${Math.round(99 - 4 * kk)})`;
   for (const [s, side] of [['L', 'L'], ['R', 'R']]) {
     const [ex, ey] = EYE[s];
     set(el['eye' + s], 'transform', `translate(${(ex + gx).toFixed(2)} ${(ey + gy).toFixed(2)})`);
     set(el['eye' + s + 'in'], 'transform', `scale(${(pu * .94).toFixed(3)} ${(pu * (1 - cur.happy * .3)).toFixed(3)})`);
-    set(g('sock' + s), 'transform', `translate(${(ex + gx * .3).toFixed(2)} ${(ey + 4 + gy * .3).toFixed(2)})`);
+    set(g('cheek' + s), 'transform', `translate(${(ex + (s === 'L' ? -10 : 10) + gx * .3).toFixed(2)} ${(ey + 46 + gy * .3).toFixed(2)})`); set(g('cheek' + s), 'opacity', (cur.cheek * .5).toFixed(3));
+    set(el['low' + s], 'transform', `translate(0 ${(46 - clamp(cur.low, 0, 1) * 85).toFixed(2)})`);
     const lidv = clamp(Math.max(cur['lid' + s], bl), 0, 1), shut = clamp((lidv - .72) / .22, 0, 1);
     set(el['eye' + s], 'opacity', (eyeOp * (1 - shut)).toFixed(3));
     const sp = g('sleep' + s); set(sp, 'transform', `translate(${ex + gx * .6} ${ey + 4 + gy * .5})`); set(sp, 'opacity', (shut * (1 - cur.happy)).toFixed(3));
     set(g('iris' + s), 'transform', `translate(${(cur.gx * 9).toFixed(2)} ${(cur.gy * 12).toFixed(2)})`);
     const lid = clamp(Math.max(cur['lid' + s], bl), 0, 1);
     // кришка повіки: від -62 (відкрито) до +36 (закрито), з нахилом
-    set(el['lid' + s].firstElementChild, 'fill', lidFill); set(el['lid' + s], 'transform', `translate(0 ${(-56 + lid * 96).toFixed(2)}) rotate(${(cur['tilt' + s] * (s === 'L' ? 1 : -1)).toFixed(1)})`);
+    set(el['lid' + s], 'transform', `translate(0 ${(-56 + lid * 96).toFixed(2)}) rotate(${(cur['tilt' + s] * (s === 'L' ? 1 : -1)).toFixed(1)})`);
     const hp = el['happy' + s]; set(hp, 'transform', `translate(${ex + gx * .6} ${ey + 8 + gy * .5})`); set(hp, 'opacity', clamp(cur.happy * 1.2 - .1, 0, 1).toFixed(3));
     const br_ = el['brow' + s]; const by = cur['b' + s + 'y'], ba = cur['b' + s + 'a'];
     set(br_, 'transform', `translate(${ex + gx * .5} ${ey - 57 + by + gy * .4}) rotate(${(s === 'L' ? ba : -ba).toFixed(1)})`);
   }
-  for (const st of el.stars) st.setAttribute('opacity', clamp(cur.star, 0, 1).toFixed(2));
   // рот
   const w = cur.mw, d = mouthPath(w, cur.mc, cur.mo, cur.mt, cur.ms);
   set(el.mouthLine, 'd', d); set(el.mouthClip, 'd', d); set(el.mouthFill, 'd', d);
   set(el.mouthFill, 'opacity', clamp(cur.mo * 5, 0, 1).toFixed(2));
   set(el.tongue, 'cx', cur.ms.toFixed(1)); set(el.tongue, 'cy', (cur.mc + cur.mo * 118 * .55 + cur.mt * .25 - 4).toFixed(1));
   set(el.tongue, 'rx', (w * .5).toFixed(1)); set(el.tongue, 'ry', (14 * cur.mo + 1).toFixed(1)); set(el.tongue, 'opacity', clamp(cur.mo * 2.4 - .3, 0, 1).toFixed(2));
-  set(el.mouthG, 'transform', `translate(${(203 + cur.mx + gx * .35).toFixed(2)} ${(334 + gy * .4).toFixed(2)})`);
+  set(el.mouthG, 'transform', `translate(${(203 + cur.mx + gx * .35).toFixed(2)} ${(372 + gy * .4).toFixed(2)})`);
   // руки
   lay.wave = Math.max(0, lay.wave - dt / 1.6);
   const wv = Math.sin(t * 13) * 24 * lay.wave;
-  const flap = emo === 'celebrate' && !RM ? Math.sin(t * 9) * 12 : 0;
+  const flap = emo === 'celebrate' && !RM ? Math.sin(t * 9) * 8 : 0;
   set(el.armL, 'transform', `translate(66 300) rotate(${(cur.armL + wv + flap).toFixed(1)})`);
   set(el.armR, 'transform', `translate(334 300) rotate(${(-(cur.armR) - flap).toFixed(1)})`);
   // ядро
   const pulse = cur.core * (1 + (RM ? 0 : .07 * br) + (emo === 'celebrate' && !RM ? .08 * Math.sin(t * 9) : 0));
-  const fs = .5 + .42 * pulse, fx = RM ? 0 : .045 * Math.sin(t * 7.3), fy = RM ? 0 : .06 * Math.sin(t * 5.1 + 1);
-  set(el.coreG, 'transform', `translate(208 ${(132 + (1 - fs) * 40).toFixed(1)}) scale(${(fs * (1 + fx)).toFixed(3)} ${(fs * (1 + fy)).toFixed(3)})`);
+  const fs = .62 + .55 * pulse, fx = RM ? 0 : .045 * Math.sin(t * 7.3), fy = RM ? 0 : .06 * Math.sin(t * 5.1 + 1);
+  set(el.coreG, 'transform', `translate(206 ${(150 + (1 - fs) * 40).toFixed(1)}) scale(${(fs * (1 + fx)).toFixed(3)} ${(fs * (1 + fy)).toFixed(3)})`);
   set(el.coreG, 'opacity', clamp(.55 + pulse * .45, 0, 1).toFixed(2));
-  set(g('rim'), 'opacity', clamp(pulse * .38, 0, .7).toFixed(2));
-  set(el.innerGlow, 'opacity', clamp(pulse * .8, 0, 1).toFixed(2)); set(g('halo'), 'opacity', clamp(.08 + pulse * .34, 0, .6).toFixed(2));
+  set(el.innerGlow, 'opacity', clamp(pulse * .8, 0, 1).toFixed(2)); set(g('halo'), 'opacity', clamp(.2 + pulse * .4, 0, .75).toFixed(2));
   set(el.innerGlow2, 'opacity', clamp(pulse * .62, 0, 1).toFixed(2));
   set(g('browGlow'), 'opacity', clamp(pulse * .62, 0, .95).toFixed(2));
-  set(el.spark, 'opacity', clamp(cur.spark * (.75 + (RM ? 0 : .25 * Math.sin(t * 3))), 0, 1).toFixed(2));
+  const bri = clamp(cur.bright, 0, 1);
+  set(el.rig, 'style', `filter:brightness(${(.42 + .58 * bri).toFixed(3)})`);
+  for (const f of el.fins) f.setAttribute('opacity', (.25 + .6 * bri).toFixed(2));
+  set(g('rimCrisp'), 'opacity', (.3 + .6 * bri).toFixed(2));
   const zy = RM ? 0 : (t * 14) % 22;
   set(el.zzz, 'opacity', clamp(cur.zzz, 0, 1).toFixed(2)); set(el.zzz, 'transform', `translate(0 ${-zy.toFixed(1)})`);
 
-  // світло сцени: від позиції ядра
-  const cr = el.coreG.getBoundingClientRect(), hr = hero.getBoundingClientRect();
-  const cx = cr.left + cr.width / 2 - hr.left, cy = cr.top + cr.height / 2 - hr.top;
+  // світло сцени: радіальне свічення від центру Люмо; яскравість = емоція, на святі — спалах 300 мс
+  const sr_ = el.svg.getBoundingClientRect(), hr = hero.getBoundingClientRect();
+  const cx = sr_.left + sr_.width / 2 - hr.left, cy = sr_.top + sr_.height * .62 - hr.top;
   coreXY.x = cx; coreXY.y = cy;
-  const lp = Math.max(cur.lp, .05) * (1 + (RM ? 0 : .05 * br));
-  const night = emo === 'sleepy';
-  const rs = document.documentElement.style;
-  rs.setProperty('--lx', cx.toFixed(0) + 'px'); rs.setProperty('--ly', cy.toFixed(0) + 'px'); rs.setProperty('--glow', lp.toFixed(3)); rs.setProperty('--sat', clamp(cur.sat, .6, 1.3).toFixed(3));
-  el.light.style.opacity = clamp(lp * (night ? .36 : .34), 0, .8).toFixed(3);
-  el.light.style.transform = `translate(${cx.toFixed(1)}px, ${cy.toFixed(1)}px) scale(${(.5 + lp * .5).toFixed(3)})`;
-  // контактна тінь і калюжа світла на підлозі
-  const lift = clamp(-y / 40, 0, 1);
-  el.contact.style.transform = `scale(${(1 - lift * .32).toFixed(3)}, ${(1 - lift * .3).toFixed(3)})`;
-  el.contact.style.opacity = (night ? .3 : .85) * (1 - lift * .5);
-  el.pool.style.opacity = clamp(.2 + lp * .5, 0, .95).toFixed(3);
-  el.pool.style.transform = `scale(${(.7 + lp * .3).toFixed(3)}, ${(.8 + lp * .2).toFixed(3)})`;
+  lay.flash = Math.max(0, lay.flash - dt / .3);
+  const lp = Math.max(cur.bright, .05);
+  const pulseL = 1 + (RM ? 0 : (sleepy ? .02 : .035) * br);
+  el.light.style.opacity = clamp(lp * pulseL, 0, 1).toFixed(3);
+  el.light.style.filter = lay.flash > 0 ? `brightness(${(1 + .45 * lay.flash).toFixed(3)})` : '';
+  el.light.style.transform = `translate(${cx.toFixed(1)}px, ${cy.toFixed(1)}px) scale(${((.8 + lp * .2) * (1 + .18 * lay.flash)).toFixed(3)})`;
+  // світлова пляма на підлозі
+  const lift = clamp(-y / 24, 0, 1);
+  el.pool.style.opacity = (.55 * (.35 + .65 * lp)).toFixed(3);
+  el.pool.style.transform = `scale(${((.75 + lp * .25) * (1 - lift * .12)).toFixed(3)}, ${(.85 + lp * .15).toFixed(3)})`;
 
   // підсвічування літер заголовка: спад від відстані до ядра; у «що світиться» — від найближчої літери до найдальшої
   if (still || (frame++ & 1) === 0) {
-    const R = (night ? 560 : 900) * (.5 + lp * .5);
+    const R = 1300 * (.55 + lp * .45);
     let dmin = 1e9, dmax = 0;
     for (const L_ of letters) { L_.d = Math.hypot(L_.x - cx, L_.y - cy); if (L_.glow) { dmin = Math.min(dmin, L_.d); dmax = Math.max(dmax, L_.d); } }
     const span = Math.max(1, dmax - dmin), amp = clamp(lp, 0, 1.25);
@@ -267,7 +276,7 @@ function say(text, ms = 6000) {
 /* ---------- погляд: курсор / дотик ---------- */
 function aimAt(px, py) {
   const r = el.svg.getBoundingClientRect();
-  const ex = r.left + r.width * (200 / 400), ey = r.top + r.height * (262 / 500);
+  const ex = r.left + r.width * (200 / 400), ey = r.top + r.height * (300 / 500);
   const dx = px - ex, dy = py - ey, dist = Math.hypot(dx, dy) || 1;
   const s = clamp(dist / (r.height * .55), 0, 1);
   lay.lookX = dx / dist * s; lay.lookY = dy / dist * s;
@@ -303,9 +312,8 @@ el.svg.addEventListener('click', () => {
   const n = CYCLE[ci]; lockUntil = performance.now() + 5000;
   lay.wave = n === 'joy' ? 1 : lay.wave;
   setEmo(n); const key = { idle:'hello', joy:'joy', curious:'curious', think:'think', celebrate:'celebrate', sleepy:'sleepy' }[n];
-  say(L()[key], n === 'sleepy' ? 0 : 5000);
-  if (n === 'celebrate') setTimeout(() => burst(), RM ? 0 : 380);
-});
+  say(lineFor(key), n === 'sleepy' ? 0 : 5000);
+  });
 
 /* ---------- цікавість: курсор угорі екрана / початок прокрутки ---------- */
 let topHold = 0;
@@ -331,12 +339,12 @@ function sizeCanvas() { DPR = Math.min(2, devicePixelRatio || 1); cv.width = her
 function burst() {
   if (RM) return;
   sizeCanvas();
-  const COLS = ['#FF7A45', '#FF9A66', '#FF5F25', '#FFB27E', '#FFD9A8'];
+  const COLS = ['#FFD27A', '#FF8FA0'];
   const hr = hero.getBoundingClientRect(), sr = el.svg.getBoundingClientRect();
   const x = sr.left - hr.left + sr.width * .5, y = sr.top - hr.top + sr.height * .52, R0 = sr.height * .36;
-  for (let i = 0; i < 72; i++) {
-    const a = rnd(0, Math.PI * 2), v = rnd(260, 680), r0 = R0 * rnd(.75, 1.05);
-    parts.push({ x: x + Math.cos(a) * r0 * .85, y: y + Math.sin(a) * r0, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 120, r: rnd(3, 8), life: 0, max: rnd(1.1, 1.9), c: COLS[i % COLS.length], star: i % 5 === 0, rot: rnd(0, 6.28), vr: rnd(-6, 6) });
+  for (let i = 0; i < 22; i++) {
+    const a = rnd(0, Math.PI * 2), v = rnd(260, 620), r0 = R0 * rnd(.75, 1.05);
+    parts.push({ x: x + Math.cos(a) * r0 * .85, y: y + Math.sin(a) * r0, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 120, r: rnd(5, 11), life: 0, max: rnd(.7, .9), c: COLS[i % COLS.length], star: i % 4 === 0, rot: rnd(0, 6.28), vr: rnd(-6, 6) });
   }
   if (!running) { running = true; lastP = performance.now(); requestAnimationFrame(stepP); }
 }
@@ -351,9 +359,9 @@ function stepP(now) {
   for (const p of parts) {
     p.life += dt; p.vy += 420 * dt; p.vx *= 1 - 1.8 * dt; p.vy *= 1 - .9 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt;
     const a = clamp(1 - p.life / p.max, 0, 1);
-    cx2.globalAlpha = a; cx2.fillStyle = p.c;
-    if (p.star) { cx2.save(); cx2.translate(p.x, p.y); cx2.rotate(p.rot); const s = p.r * 1.8; cx2.beginPath(); cx2.moveTo(0, -s); cx2.lineTo(s * .28, -s * .28); cx2.lineTo(s, 0); cx2.lineTo(s * .28, s * .28); cx2.lineTo(0, s); cx2.lineTo(-s * .28, s * .28); cx2.lineTo(-s, 0); cx2.lineTo(-s * .28, -s * .28); cx2.closePath(); cx2.fill(); cx2.restore(); }
-    else { cx2.beginPath(); cx2.arc(p.x, p.y, p.r * (.5 + a * .5), 0, 6.283); cx2.fill(); }
+    cx2.globalAlpha = a; cx2.fillStyle = p.c; cx2.strokeStyle = 'rgba(42,26,46,.6)'; cx2.lineWidth = 1.5;
+    if (p.star) { cx2.save(); cx2.translate(p.x, p.y); cx2.rotate(p.rot); const s = p.r * 1.8; cx2.beginPath(); cx2.moveTo(0, -s); cx2.lineTo(s * .28, -s * .28); cx2.lineTo(s, 0); cx2.lineTo(s * .28, s * .28); cx2.lineTo(0, s); cx2.lineTo(-s * .28, s * .28); cx2.lineTo(-s, 0); cx2.lineTo(-s * .28, -s * .28); cx2.closePath(); cx2.fill(); cx2.stroke(); cx2.restore(); }
+    else { cx2.beginPath(); cx2.arc(p.x, p.y, p.r * (.5 + a * .5), 0, 6.283); cx2.fill(); cx2.stroke(); }
   }
   cx2.restore();
   if (parts.length) requestAnimationFrame(stepP); else { running = false; cx2.clearRect(0, 0, cv.width, cv.height); }
@@ -364,8 +372,7 @@ $$('#moods button').forEach(b => b.addEventListener('click', () => {
   const name = b.dataset.emo; lastAct = performance.now(); 
   setEmo(name, { pin: name !== 'idle' });
   const key = { idle:'hello', joy:'joy', curious:'curious', think:'think', celebrate:'celebrate', sleepy:'sleepy' }[name];
-  say(L()[key], name === 'sleepy' ? 0 : 6000);
-  if (name === 'celebrate') setTimeout(() => burst(), 380);
+  say(lineFor(key), name === 'sleepy' ? 0 : 6000);
   if (name === 'idle') { pinned = false; activity(); }
 }));
 
@@ -388,7 +395,7 @@ langList.addEventListener('keydown', e => {
 document.addEventListener('click', e => { if (!e.target.closest('#lang')) openLang(false); });
 function pickLang(l) {
   lang = l; $$('#langList li').forEach(li => li.setAttribute('aria-selected', String(li.dataset.lang === l)));
-  openLang(false); langBtn.focus(); applyText(); say(L().hello);
+  openLang(false); langBtn.focus(); applyText(); say(lineFor('hello'));
   if (RM) draw(0, true);
 }
 
@@ -401,7 +408,7 @@ if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { fi
 const q = new URLSearchParams(location.search);
 if (q.get('demo') === '1') document.documentElement.classList.add('demo');
 const emoQ = q.get('emo');
-if (emoQ && E[emoQ]) { setEmo(emoQ, { pin: true }); say(L()[{ idle:'hello', joy:'joy', curious:'curious', think:'think', celebrate:'celebrate', sleepy:'sleepy' }[emoQ]], 0); } else { setEmo('idle'); bubbleText.textContent = nb(L().hello); fitBubble(); bubble.classList.add('on'); }
+if (emoQ && E[emoQ]) { setEmo(emoQ, { pin: true }); say(lineFor({ idle:'hello', joy:'joy', curious:'curious', think:'think', celebrate:'celebrate', sleepy:'sleepy' }[emoQ]), 0); } else { setEmo('idle'); bubbleText.textContent = nb(lineFor('hello')); fitBubble(); bubble.classList.add('on'); }
 if (q.get('lang') && UI[q.get('lang')]) { lang = q.get('lang'); applyText(); }
 activity();
 draw(0, true);
