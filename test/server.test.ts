@@ -411,6 +411,9 @@ test('таблица маршрутов и ролей совпадает с эт
     `GET /api/threads ${ALLR}`, 'POST /api/threads parent,student,teacher', `GET /api/threads/:id ${ALLR}`, 'POST /api/threads/:id/messages parent,student,teacher',
     'GET /api/consents/:id owner,parent,student', 'POST /api/consents/:id parent', 'POST /api/consents/:id/revoke parent',
     'GET /api/export/:id owner,parent,student', 'GET /api/audit owner',
+    // Ф9: комната урока
+    `GET /api/rooms/:id ${ALLR}`, `POST /api/rooms/:id/enter ${ALLR}`, `POST /api/rooms/:id/leave ${ALLR}`, `GET /api/rooms/:id/video ${ALLR}`,
+    'POST /api/rooms/:id/chat owner,student,teacher', `POST /api/rooms/:id/call-owner ${ALLR}`, 'POST /api/rooms/:id/recording owner', 'GET /api/room-calls owner',
   ].sort();
   assert.deepEqual(got, want);
   // контакты — ни у одного маршрута с участием преподавателя

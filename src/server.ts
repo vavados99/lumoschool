@@ -13,6 +13,7 @@ import {
 } from './access.ts';
 import { cancelMine, createSlot, enrollMe, myLessons, type LessonView, type Student } from './schedule.ts';
 import { MessageRejected, listThreads, openThread, postMessage, readThread, type Post } from './messages.ts';
+import { enterRoom, leaveRoom, roomState, postRoomMessage, callOwner, listOwnerCalls, setRecording, videoStub, RoomRefused } from './room.ts';
 import { exportData, listConsents, revokeConsent } from './consent.ts';
 
 export const COOKIE = 'sid';
@@ -149,6 +150,23 @@ function buildRoutes(): Route[] {
     return { body: e as unknown as Json };   // структура уже без чужих контактов (см. consent.ts); контакты — только самому человеку
   });
 
+  // Ф9: комната урока. Чужому и несуществующему уроку — один и тот же 403.
+  const rid = (p: string[]) => int(p[0], 'id');
+  add('GET', '/api/rooms/:id', ALL, ({ db, actor, now, params }) => ({ body: roomState(db, actor, rid(params), now) as unknown as Json }));
+  add('POST', '/api/rooms/:id/enter', ALL, ({ db, actor, now, params }) => ({ body: enterRoom(db, actor, rid(params), now) as unknown as Json }));
+  add('POST', '/api/rooms/:id/leave', ALL, ({ db, actor, now, params }) => { leaveRoom(db, actor, rid(params), now); return { body: { ok: true } }; });
+  add('POST', '/api/rooms/:id/chat', ['student', 'teacher', 'owner'], ({ db, actor, now, params, body }) =>
+    ({ status: 201, body: { id: postRoomMessage(db, actor, rid(params), str(body.body, 'body'), now) } }));
+  add('POST', '/api/rooms/:id/call-owner', ALL, ({ db, actor, now, params }) => { callOwner(db, actor, rid(params), now); return { body: { ok: true } }; });
+  add('POST', '/api/rooms/:id/recording', ['owner'], ({ db, actor, now, params, body }) => {
+    if (typeof body.on !== 'boolean') throw new HttpError(400, 'bad_request', { field: 'on' });
+    setRecording(db, actor, rid(params), body.on, now);
+    return { body: { ok: true, recording: body.on } };
+  });
+  add('GET', '/api/rooms/:id/video', ALL, ({ db, actor, now, params }) => ({ body: videoStub(db, actor, rid(params), now) as unknown as Json }));
+  add('GET', '/api/room-calls', ['owner'], ({ db, actor }) =>
+    ({ body: { calls: listOwnerCalls(db, actor).map(c => ({ id: c.id, ts: c.ts, lesson_id: c.lesson_id, caller_id: c.caller_id, caller_role: c.caller_role, caller_name: c.caller_name })) } }));
+
   add('GET', '/api/audit', ['owner'], ({ db, actor }) =>
     ({ body: { entries: (readAudit(db, actor) as { id: number; ts: string; actor_id: number | null; action: string; target_type: string | null; target_id: number | null; outcome: string }[])
       .slice(-500).map(r => ({ id: r.id, ts: r.ts, actor_id: r.actor_id, action: r.action, target_type: r.target_type, target_id: r.target_id, outcome: r.outcome })) } }));
@@ -281,6 +299,7 @@ export function createApp(db: DatabaseSync, opts: ServerOptions = {}): Server {
       if (e instanceof HttpError) return send(res, e.status, { error: e.code, ...e.extra }, e.status === 413 ? close : {});
       if (e instanceof MessageRejected) return send(res, 422, { error: 'message_rejected', reason: e.reason, message: e.message });
       if (e instanceof Denied) return send(res, 403, { error: 'forbidden' });       // внутреннее имя права наружу не отдаём
+      if (e instanceof RoomRefused) return send(res, 409, { error: e.reason });
       if (e instanceof ScheduleError) return send(res, 409, { error: 'conflict', message: e.message });
       if (e instanceof AuthError) return send(res, 401, { error: 'unauthorized' });
       console.error('internal error:', e instanceof Error ? e.name : typeof e);       // в лог — только тип, не стек и не данные
