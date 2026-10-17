@@ -4,6 +4,8 @@
   "type": "module",
   "engines": { "node": ">=24" },
   "scripts": {
-    "test": "node --test test/*.test.ts"
+    "test": "node --test test/*.test.ts",
+    "start": "node src/server.ts",
+    "seed": "node src/seed.ts"
   }
 }
