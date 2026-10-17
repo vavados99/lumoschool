@@ -76,7 +76,8 @@ test('согласие: ребёнок до 16 без согласия не за
   denied(() => enroll(db, actorOf(db, ids.owner), ids.lessonB, ids.kidA));
   denied(() => enroll(db, actorOf(db, ids.parentB), ids.lessonB, ids.kidA)); // не его ребёнок
   grantConsent(db, actorOf(db, ids.parentA), ids.kidA);
-  enroll(db, actorOf(db, ids.parentA), ids.lessonB, ids.kidA);
+  const other = Number(db.prepare("INSERT INTO lessons(teacher_id, starts_at) VALUES (?, '2099-01-02T10:00:00.000Z')").run(ids.teacherB).lastInsertRowid); // другое время: lessonB пересёкся бы с lessonA ребёнка
+  enroll(db, actorOf(db, ids.parentA), other, ids.kidA);
   denied(() => enroll(db, actorOf(db, ids.teacherA), ids.lessonA, ids.kidA)); // у учителя права нет
 });
 

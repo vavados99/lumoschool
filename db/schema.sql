@@ -49,6 +49,8 @@ CREATE TABLE lessons (
   starts_at  TEXT NOT NULL,            -- ISO UTC (Ф3: createSlot нормализует в toISOString)
   status     TEXT NOT NULL DEFAULT 'planned' CHECK (status IN ('planned','cancelled','done')),
   duration_min INTEGER NOT NULL DEFAULT 50 CHECK (duration_min BETWEEN 15 AND 180),  -- Ф3
+  audience   TEXT NOT NULL DEFAULT 'minor' CHECK (audience IN ('minor','adult')),     -- Ф4: дети/подростки или взрослые
+  max_students INTEGER NOT NULL DEFAULT 6 CHECK (max_students BETWEEN 1 AND 50),      -- Ф4: лимит группы (6 дети/подростки, 8 взрослые; константы в access.ts)
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE TABLE lesson_enrollments (
@@ -95,7 +97,7 @@ INSERT INTO role_permissions(role, permission) VALUES
  ('student','own_profile.read'),('student','own_lessons.read'),('student','own_contacts.read'),('student','lessons.enroll'),('student','lessons.cancel'),
  ('parent','own_profile.read'),('parent','own_contacts.read'),('parent','child_profile.read'),('parent','child_lessons.read'),('parent','consent.grant'),('parent','child_lessons.enroll'),('parent','child_lessons.cancel'),('parent','message.receive'),
  ('teacher','own_lessons.read'),('teacher','slots.create'),('teacher','lesson_students.read'),('teacher','message.send'),
- ('owner','own_profile.read'),('owner','own_contacts.read'),('owner','contacts.read_any'),('owner','students.read_all'),('owner','audit.read'),('owner','lessons.enroll'),('owner','lessons.cancel'),('owner','lessons.read_all'),('owner','message.send');
+ ('owner','own_profile.read'),('owner','own_contacts.read'),('owner','contacts.read_any'),('owner','students.read_all'),('owner','audit.read'),('owner','lessons.enroll'),('owner','lessons.cancel'),('owner','lessons.read_all'),('owner','lessons.set_capacity'),('owner','message.send');
 
 -- Ф2: вход. Отдельно от contact_vault. Пароль — только хеш со своей солью и параметрами в строке.
 CREATE TABLE credentials (

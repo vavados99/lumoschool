@@ -103,9 +103,9 @@ test('(г) владелец видит всё и может записать/о�
   assert.deepEqual(idsOf(all), [ids.lessonA, ids.lessonB].sort((x, y) => x - y));
   assert.deepEqual(all.flatMap(l => l.students.map(s => s.id)).sort(), [ids.kidA, ids.kidB, ids.adultC].sort());
   assert.ok(!JSON.stringify(all).includes('example.invalid'));
-  enrollMe(db, tok.owner, NOW, ids.lessonA, ids.adultC);
+  enrollMe(db, tok.owner, NOW, ids.lessonA, ids.teen16);
   assert.equal(myLessons(db, tok.owner, NOW).find(l => l.id === ids.lessonA)!.students.length, 2);
-  cancelMine(db, tok.owner, NOW, ids.lessonA, ids.adultC);
+  cancelMine(db, tok.owner, NOW, ids.lessonA, ids.teen16);
   // журнал читает только владелец и в нём есть действия расписания
   const log = readAudit(db, actorOf(db, ids.owner)) as { action: string; actor_id: number; outcome: string }[];
   assert.ok(log.some(r => r.action === 'enroll.done' && r.actor_id === ids.owner));

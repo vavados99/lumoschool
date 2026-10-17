@@ -107,9 +107,46 @@ export class ScheduleError extends Error {
 }
 export const toMs = (iso: string) => Date.parse(/(Z|[+-]\d\d:?\d\d)$/.test(iso) ? iso : iso + 'Z');
 
+/** Лимит группы по умолчанию (Ф4). Те же числа — DEFAULT в db/schema.sql ('minor' = 6). */
+export const DEFAULT_CAPACITY = { minor: 6, adult: 8 } as const;
+export type Audience = keyof typeof DEFAULT_CAPACITY;
+
+/** Проверка и запись — в одной транзакции BEGIN IMMEDIATE (write-lock берётся ДО проверок:
+ *  два параллельных вызова идут по очереди). Ожидаемые отказы (Denied/ScheduleError) коммитятся —
+ *  в базе к этому моменту только записи журнала, и отказ обязан остаться в журнале. Прочее — ROLLBACK. */
+export function inTx<T>(db: DatabaseSync, fn: () => T): T {
+  if (db.isTransaction) return fn();
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    const r = fn();
+    db.exec('COMMIT');
+    return r;
+  } catch (e) {
+    db.exec(e instanceof Denied || e instanceof ScheduleError ? 'COMMIT' : 'ROLLBACK');
+    throw e;
+  }
+}
+
+/** Владелец меняет лимит группы. Не-владелец — отказ + журнал. Ниже числа уже записанных — отказ. */
+export function setLessonCapacity(db: DatabaseSync, a: Actor, lessonId: number, max: number) {
+  inTx(db, () => {
+    guard(db, a, 'lessons.set_capacity', 'lesson', lessonId, () => a.role === 'owner');
+    const refuse = (action: string, msg: string): never => { audit(db, a, action, 'lesson', lessonId, 'denied'); throw new ScheduleError(msg); };
+    if (!Number.isInteger(max) || max < 1 || max > 50) refuse('capacity.bad_value', 'capacity must be an integer 1..50');
+    if (!db.prepare('SELECT 1 FROM lessons WHERE id = ?').get(lessonId)) refuse('capacity.no_lesson', 'lesson not found');
+    const n = (db.prepare(`SELECT COUNT(*) c FROM lesson_enrollments WHERE lesson_id = ? AND status = 'active'`).get(lessonId) as { c: number }).c;
+    if (max < n) refuse('capacity.below_enrolled', 'capacity is below the number of enrolled students');
+    db.prepare('UPDATE lessons SET max_students = ? WHERE id = ?').run(max, lessonId);
+    audit(db, a, 'capacity.changed', 'lesson', lessonId, 'allowed');
+  });
+}
+
 /** Запись на урок. Правила: право роли; «своё» (родитель — только свой ребёнок; ученик — только себя и только 16+);
  *  согласие родителя до 16; урок существует, не отменён, не в прошлом; двойная запись — отказ. */
 export function enroll(db: DatabaseSync, a: Actor, lessonId: number, studentId: number, now = Date.now()) {
+  inTx(db, () => enrollTx(db, a, lessonId, studentId, now));
+}
+function enrollTx(db: DatabaseSync, a: Actor, lessonId: number, studentId: number, now: number) {
   const perm = a.role === 'parent' ? 'child_lessons.enroll' : 'lessons.enroll';
   const own = () => a.role === 'parent' ? isParentOf(db, a.id, studentId)
     : a.role === 'student' ? a.id === studentId && !isMinor(db, studentId, new Date(now)) : true;
@@ -124,11 +161,17 @@ export function enroll(db: DatabaseSync, a: Actor, lessonId: number, studentId: 
     audit(db, a, 'enroll.no_consent', 'student', studentId, 'denied');
     throw new Denied('no parental consent');
   }
-  const l = db.prepare('SELECT starts_at, status FROM lessons WHERE id = ?').get(lessonId) as { starts_at: string; status: string } | undefined;
+  const l = db.prepare('SELECT starts_at, status, duration_min, max_students FROM lessons WHERE id = ?').get(lessonId) as { starts_at: string; status: string; duration_min: number; max_students: number } | undefined;
   if (!l || l.status !== 'planned') refuse('enroll.no_lesson', 'lesson not available');
   if (toMs(l!.starts_at) <= now) refuse('enroll.past', 'lesson is in the past');
   const ex = db.prepare('SELECT status FROM lesson_enrollments WHERE lesson_id = ? AND student_id = ?').get(lessonId, studentId) as { status: string } | undefined;
   if (ex?.status === 'active') refuse('enroll.duplicate', 'already enrolled');
+  const taken = (db.prepare(`SELECT COUNT(*) c FROM lesson_enrollments WHERE lesson_id = ? AND status = 'active'`).get(lessonId) as { c: number }).c;
+  if (taken >= l!.max_students) refuse('enroll.full', 'group is full');
+  const s0 = toMs(l!.starts_at), e0 = s0 + l!.duration_min * 60_000;
+  const mine = db.prepare(`SELECT l.starts_at, l.duration_min FROM lesson_enrollments e JOIN lessons l ON l.id = e.lesson_id
+    WHERE e.student_id = ? AND e.status = 'active' AND l.status != 'cancelled' AND l.id != ?`).all(studentId, lessonId) as { starts_at: string; duration_min: number }[];
+  if (mine.some(m => toMs(m.starts_at) < e0 && toMs(m.starts_at) + m.duration_min * 60_000 > s0)) refuse('enroll.student_overlap', 'student already has a lesson at this time');
   if (ex) db.prepare(`UPDATE lesson_enrollments SET status='active', booked_by=?, cancelled_at=NULL WHERE lesson_id=? AND student_id=?`).run(a.id, lessonId, studentId);
   else db.prepare('INSERT INTO lesson_enrollments(lesson_id, student_id, booked_by) VALUES (?,?,?)').run(lessonId, studentId, a.id);
   audit(db, a, 'enroll.done', 'lesson', lessonId, 'allowed');
@@ -136,6 +179,9 @@ export function enroll(db: DatabaseSync, a: Actor, lessonId: number, studentId: 
 
 /** Отмена записи: родитель — своего ребёнка, ученик — свою, владелец — любую; преподаватель — нет. */
 export function cancelEnrollment(db: DatabaseSync, a: Actor, lessonId: number, studentId: number, now = Date.now()) {
+  inTx(db, () => cancelTx(db, a, lessonId, studentId, now));
+}
+function cancelTx(db: DatabaseSync, a: Actor, lessonId: number, studentId: number, now: number) {
   const perm = a.role === 'parent' ? 'child_lessons.cancel' : 'lessons.cancel';
   const own = () => a.role === 'parent' ? isParentOf(db, a.id, studentId) : a.role === 'student' ? a.id === studentId : true;
   guard(db, a, perm, 'lesson', lessonId, own);
