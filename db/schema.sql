@@ -51,6 +51,7 @@ CREATE TABLE lessons (
   duration_min INTEGER NOT NULL DEFAULT 50 CHECK (duration_min BETWEEN 15 AND 180),  -- Ф3
   audience   TEXT NOT NULL DEFAULT 'minor' CHECK (audience IN ('minor','adult')),     -- Ф4: дети/подростки или взрослые
   max_students INTEGER NOT NULL DEFAULT 6 CHECK (max_students BETWEEN 1 AND 50),      -- Ф4: лимит группы (6 дети/подростки, 8 взрослые; константы в access.ts)
+  substitute_id INTEGER REFERENCES users(id),                                          -- Ф5: замена преподавателя на ЭТОТ урок (ставит только владелец)
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE TABLE lesson_enrollments (
@@ -97,7 +98,7 @@ INSERT INTO role_permissions(role, permission) VALUES
  ('student','own_profile.read'),('student','own_lessons.read'),('student','own_contacts.read'),('student','lessons.enroll'),('student','lessons.cancel'),
  ('parent','own_profile.read'),('parent','own_contacts.read'),('parent','child_profile.read'),('parent','child_lessons.read'),('parent','consent.grant'),('parent','child_lessons.enroll'),('parent','child_lessons.cancel'),('parent','message.receive'),
  ('teacher','own_lessons.read'),('teacher','slots.create'),('teacher','lesson_students.read'),('teacher','message.send'),
- ('owner','own_profile.read'),('owner','own_contacts.read'),('owner','contacts.read_any'),('owner','students.read_all'),('owner','audit.read'),('owner','lessons.enroll'),('owner','lessons.cancel'),('owner','lessons.read_all'),('owner','lessons.set_capacity'),('owner','message.send');
+ ('owner','own_profile.read'),('owner','own_contacts.read'),('owner','contacts.read_any'),('owner','students.read_all'),('owner','audit.read'),('owner','lessons.enroll'),('owner','lessons.cancel'),('owner','lessons.read_all'),('owner','lessons.set_capacity'),('owner','lessons.set_substitute'),('owner','settings.cancel_window'),('owner','message.send');
 
 -- Ф2: вход. Отдельно от contact_vault. Пароль — только хеш со своей солью и параметрами в строке.
 CREATE TABLE credentials (
@@ -117,6 +118,15 @@ CREATE TABLE login_attempts (
   id    INTEGER PRIMARY KEY,
   login TEXT NOT NULL,
   ts    INTEGER NOT NULL,
-  ok    INTEGER NOT NULL
+  ok    INTEGER NOT NULL,
+  ip    TEXT NOT NULL DEFAULT 'unknown'   -- Ф5: адрес источника; блок по паре логин+IP и по IP
 );
 CREATE INDEX login_attempts_idx ON login_attempts(login, ts);
+CREATE INDEX login_attempts_ip_idx ON login_attempts(ip, ts);
+
+-- Ф5: настройки владельца (окно отмены записи, часы до начала урока)
+CREATE TABLE settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+INSERT INTO settings(key, value) VALUES ('cancel_window_hours', '24');

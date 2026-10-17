@@ -36,6 +36,16 @@ function teacherSharesLesson(db: DatabaseSync, teacherId: number, studentId: num
     `SELECT 1 FROM lessons l JOIN lesson_enrollments e ON e.lesson_id = l.id
      WHERE l.teacher_id = ? AND e.student_id = ? AND e.status = 'active'`).get(teacherId, studentId);
 }
+/** Ф5: уроки, на которых user — заменяющий СЕЙЧАС: замена назначена, урок не отменён/не проведён и ещё не закончился. */
+export function activeSubstituteLessons(db: DatabaseSync, userId: number, now: number): number[] {
+  const rows = db.prepare(`SELECT id, starts_at, duration_min FROM lessons WHERE substitute_id = ? AND status = 'planned'`).all(userId) as { id: number; starts_at: string; duration_min: number }[];
+  return rows.filter(r => toMs(r.starts_at) + r.duration_min * 60_000 > now).map(r => r.id);
+}
+function substituteSeesStudent(db: DatabaseSync, userId: number, studentId: number, now: number): boolean {
+  const ids = activeSubstituteLessons(db, userId, now);
+  if (!ids.length) return false;
+  return !!db.prepare(`SELECT 1 FROM lesson_enrollments WHERE student_id = ? AND status = 'active' AND lesson_id IN (${ids.map(() => '?').join(',')})`).get(studentId, ...ids);
+}
 function isParentOf(db: DatabaseSync, parentId: number, childId: number): boolean {
   return !!db.prepare('SELECT 1 FROM parent_child WHERE parent_id = ? AND child_id = ?').get(parentId, childId);
 }
@@ -50,14 +60,14 @@ export function isMinor(db: DatabaseSync, userId: number, today = new Date()): b
 export type Profile = { id: number; display_name: string; level: string | null };
 
 /** Профиль без контактов (в запросе контактных колонок нет). */
-export function getProfile(db: DatabaseSync, a: Actor, targetId: number): Profile {
+export function getProfile(db: DatabaseSync, a: Actor, targetId: number, now = Date.now()): Profile {
   const q = () => db.prepare(
     `SELECT u.id, u.display_name, s.level FROM users u JOIN students s ON s.user_id = u.id WHERE u.id = ?`).get(targetId) as Profile | undefined;
   let perm: string, ok: boolean;
   switch (a.role) {
     case 'student': perm = 'own_profile.read'; ok = a.id === targetId; break;
     case 'parent': perm = 'child_profile.read'; ok = isParentOf(db, a.id, targetId); break;
-    case 'teacher': perm = 'lesson_students.read'; ok = teacherSharesLesson(db, a.id, targetId); break;
+    case 'teacher': perm = 'lesson_students.read'; ok = teacherSharesLesson(db, a.id, targetId) || substituteSeesStudent(db, a.id, targetId, now); break;
     case 'owner': perm = 'students.read_all'; ok = true; break;
     default: perm = 'none'; ok = false;
   }
@@ -68,15 +78,18 @@ export function getProfile(db: DatabaseSync, a: Actor, targetId: number): Profil
 }
 
 /** Список учеников: у каждой роли свой запрос; контактных колонок нет ни в одном. */
-export function listStudents(db: DatabaseSync, a: Actor): Profile[] {
+export function listStudents(db: DatabaseSync, a: Actor, now = Date.now()): Profile[] {
   guard(db, a, a.role === 'owner' ? 'students.read_all' : a.role === 'teacher' ? 'lesson_students.read'
     : a.role === 'parent' ? 'child_profile.read' : 'own_profile.read', 'student', null, yes);
   const base = `SELECT DISTINCT u.id, u.display_name, s.level FROM users u JOIN students s ON s.user_id = u.id`;
   switch (a.role) {
     case 'owner': return db.prepare(`${base} ORDER BY u.id`).all() as Profile[];
-    case 'teacher': return db.prepare(
-      `${base} JOIN lesson_enrollments e ON e.student_id = u.id JOIN lessons l ON l.id = e.lesson_id
-       WHERE l.teacher_id = ? AND e.status = 'active' ORDER BY u.id`).all(a.id) as Profile[];
+    case 'teacher': {
+      const sub = activeSubstituteLessons(db, a.id, now);   // замена: только эти уроки
+      return db.prepare(
+        `${base} JOIN lesson_enrollments e ON e.student_id = u.id JOIN lessons l ON l.id = e.lesson_id
+         WHERE (l.teacher_id = ? OR l.id IN (${sub.length ? sub.map(() => '?').join(',') : 'NULL'})) AND e.status = 'active' ORDER BY u.id`).all(a.id, ...sub) as Profile[];
+    }
     case 'parent': return db.prepare(
       `${base} JOIN parent_child pc ON pc.child_id = u.id WHERE pc.parent_id = ? ORDER BY u.id`).all(a.id) as Profile[];
     case 'student': return db.prepare(`${base} WHERE u.id = ?`).all(a.id) as Profile[];
@@ -191,8 +204,56 @@ function cancelTx(db: DatabaseSync, a: Actor, lessonId: number, studentId: numbe
     audit(db, a, 'cancel.refused', 'lesson', lessonId, 'denied');
     throw new ScheduleError('no active future enrollment');
   }
+  // Ф5: окно отмены. Ученик/родитель — не позже чем за N часов до начала; владелец — всегда.
+  if (a.role !== 'owner' && toMs(r.starts_at) - now < getCancelWindowHours(db) * 3_600_000) {
+    audit(db, a, 'cancel.too_late', 'lesson', lessonId, 'denied');
+    throw new ScheduleError('cancellation window closed');
+  }
   db.prepare(`UPDATE lesson_enrollments SET status='cancelled', cancelled_at=datetime('now') WHERE lesson_id=? AND student_id=?`).run(lessonId, studentId);
+  if (a.role === 'owner' && toMs(r.starts_at) - now < getCancelWindowHours(db) * 3_600_000) audit(db, a, 'cancel.window_override', 'lesson', lessonId, 'allowed');
   audit(db, a, 'cancel.done', 'lesson', lessonId, 'allowed');
+}
+
+export const DEFAULT_CANCEL_WINDOW_HOURS = 24;
+/** Окно отмены (часы до начала урока). Нет записи/мусор в настройке → 24 (безопасный дефолт). */
+export function getCancelWindowHours(db: DatabaseSync): number {
+  const r = db.prepare(`SELECT value FROM settings WHERE key = 'cancel_window_hours'`).get() as { value: string } | undefined;
+  const n = r ? Number(r.value) : NaN;
+  return Number.isInteger(n) && n >= 0 && n <= 720 ? n : DEFAULT_CANCEL_WINDOW_HOURS;
+}
+/** Только владелец. 0..720 часов, целое. Всё в журнал. */
+export function setCancelWindowHours(db: DatabaseSync, a: Actor, hours: number) {
+  inTx(db, () => {
+    guard(db, a, 'settings.cancel_window', 'settings', null, () => a.role === 'owner');
+    if (!Number.isInteger(hours) || hours < 0 || hours > 720) {
+      audit(db, a, 'settings.bad_value', 'settings', null, 'denied');
+      throw new ScheduleError('cancel window must be an integer 0..720 hours');
+    }
+    db.prepare(`INSERT INTO settings(key, value) VALUES ('cancel_window_hours', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run(String(hours));
+    audit(db, a, 'settings.cancel_window.changed', 'settings', null, 'allowed');
+  });
+}
+
+/** Ф5: владелец назначает заменяющего на ОДИН урок. Заменяющий — преподаватель, не сам учитель урока; урок планируется и не закончился. */
+export function assignSubstitute(db: DatabaseSync, a: Actor, lessonId: number, substituteId: number, now = Date.now()) {
+  inTx(db, () => {
+    guard(db, a, 'lessons.set_substitute', 'lesson', lessonId, () => a.role === 'owner');
+    const refuse = (action: string, msg: string): never => { audit(db, a, action, 'lesson', lessonId, 'denied'); throw new ScheduleError(msg); };
+    const l = db.prepare('SELECT teacher_id, starts_at, duration_min, status FROM lessons WHERE id = ?').get(lessonId) as { teacher_id: number; starts_at: string; duration_min: number; status: string } | undefined;
+    if (!l || l.status !== 'planned' || toMs(l.starts_at) + l.duration_min * 60_000 <= now) refuse('substitute.no_lesson', 'lesson not available');
+    if (!db.prepare('SELECT 1 FROM teachers t JOIN users u ON u.id = t.user_id WHERE t.user_id = ? AND u.role = \'teacher\'').get(substituteId)) refuse('substitute.not_teacher', 'substitute must be a teacher');
+    if (l!.teacher_id === substituteId) refuse('substitute.same_teacher', 'substitute is the lesson teacher');
+    db.prepare('UPDATE lessons SET substitute_id = ? WHERE id = ?').run(substituteId, lessonId);
+    audit(db, a, 'substitute.assigned', 'lesson', lessonId, 'allowed');
+  });
+}
+/** Снять замену — доступ заменяющего пропадает сразу. */
+export function removeSubstitute(db: DatabaseSync, a: Actor, lessonId: number) {
+  inTx(db, () => {
+    guard(db, a, 'lessons.set_substitute', 'lesson', lessonId, () => a.role === 'owner');
+    const r = db.prepare('UPDATE lessons SET substitute_id = NULL WHERE id = ? AND substitute_id IS NOT NULL').run(lessonId);
+    audit(db, a, 'substitute.removed', 'lesson', lessonId, Number(r.changes) > 0 ? 'allowed' : 'denied');
+  });
 }
 
 /** Сообщения. Преподаватель → несовершеннолетнему напрямую нельзя: только через родителя. */

@@ -2,7 +2,7 @@
 // Нет сессии / просрочена → отказ + запись в журнал. Контактных колонок нет ни в одном запросе.
 import type { DatabaseSync } from 'node:sqlite';
 import { currentUser } from './auth.ts';
-import { type Actor, type Audience, DEFAULT_CAPACITY, setLessonCapacity, Denied, ScheduleError, audit, guard, enroll, cancelEnrollment, toMs } from './access.ts';
+import { activeSubstituteLessons, type Actor, type Audience, DEFAULT_CAPACITY, setLessonCapacity, Denied, ScheduleError, audit, guard, enroll, cancelEnrollment, toMs } from './access.ts';
 
 export type Student = { id: number; display_name: string; level: string | null };
 export type LessonView = {
@@ -63,7 +63,8 @@ export function myLessons(db: DatabaseSync, token: string, now: number): LessonV
     JOIN students s ON s.user_id = u.id WHERE e.lesson_id = ? AND e.status = 'active'`;
   switch (a.role) {
     case 'teacher':
-      rows = db.prepare(`${cols} WHERE l.teacher_id = ? ORDER BY l.starts_at, l.id`).all(a.id) as typeof rows;
+      const sub = activeSubstituteLessons(db, a.id, now);   // замена: только назначенные уроки, пока не закончились
+      rows = db.prepare(`${cols} WHERE (l.teacher_id = ? OR l.id IN (${sub.length ? sub.map(() => '?').join(',') : 'NULL'})) ORDER BY l.starts_at, l.id`).all(a.id, ...sub) as typeof rows;
       studentsOf = id => db.prepare(`${sel} ORDER BY u.id`).all(id) as Student[];
       break;
     case 'student':

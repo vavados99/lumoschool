@@ -5,6 +5,7 @@ import { type Actor, type Role } from './access.ts';
 
 export const MIN_PASSWORD = 10;
 export const MAX_FAILS = 5;
+export const MAX_FAILS_PER_IP = 20;   // отдельный лимит на адрес (любые логины)
 export const WINDOW_MS = 15 * 60 * 1000;
 export const DEFAULT_TTL_MS = 12 * 60 * 60 * 1000;
 export class AuthError extends Error {
@@ -12,6 +13,15 @@ export class AuthError extends Error {
 }
 export const BAD_LOGIN = 'invalid login or password';
 export const BLOCKED = 'too many attempts, try later';
+
+/** Логин: Unicode NFKC, trim, lowercase. Одинаково при регистрации и входе. */
+export function normalizeLogin(raw: unknown): string {
+  return String(raw ?? '').normalize('NFKC').trim().toLowerCase();
+}
+export function normalizeIp(raw: unknown): string {
+  const s = String(raw ?? '').normalize('NFKC').trim().toLowerCase().slice(0, 64);
+  return s || 'unknown';
+}
 
 const N = 16384, R = 8, P = 1, KEYLEN = 32;
 
@@ -38,20 +48,30 @@ function audit(db: DatabaseSync, actorId: number | null, action: string, outcome
     .run(actorId, action, 'session', null, outcome);
 }
 
-export function register(db: DatabaseSync, userId: number, login: string, password: string) {
+export function register(db: DatabaseSync, userId: number, loginRaw: string, password: string) {
   if (typeof password !== 'string' || password.length < MIN_PASSWORD) throw new AuthError(`password must be at least ${MIN_PASSWORD} characters`);
+  const login = normalizeLogin(loginRaw);
   if (!login) throw new AuthError('login required');
+  if (db.prepare('SELECT 1 FROM credentials WHERE login = ?').get(login)) throw new AuthError('login already taken');
   db.prepare('INSERT INTO credentials(user_id, login, password_hash) VALUES (?,?,?)').run(userId, login, hashPassword(password));
 }
 
-function recentFails(db: DatabaseSync, login: string, now: number): number {
-  const r = db.prepare('SELECT COUNT(*) AS c FROM login_attempts WHERE login = ? AND ok = 0 AND ts > ?').get(login, now - WINDOW_MS) as { c: number };
+/** Неудачи пары логин+IP: чужой перебор логина с другого адреса настоящего владельца не блокирует. */
+function recentPairFails(db: DatabaseSync, login: string, ip: string, now: number): number {
+  const r = db.prepare('SELECT COUNT(*) AS c FROM login_attempts WHERE login = ? AND ip = ? AND ok = 0 AND ts > ?').get(login, ip, now - WINDOW_MS) as { c: number };
+  return r.c;
+}
+/** Неудачи с одного адреса по любым логинам (включая неизвестные). */
+function recentIpFails(db: DatabaseSync, ip: string, now: number): number {
+  const r = db.prepare('SELECT COUNT(*) AS c FROM login_attempts WHERE ip = ? AND ok = 0 AND ts > ?').get(ip, now - WINDOW_MS) as { c: number };
   return r.c;
 }
 
 /** Возвращает токен сессии (единственный раз; в базе только его sha256). */
-export function login(db: DatabaseSync, loginName: string, password: string, now: number, ttlMs = DEFAULT_TTL_MS): string {
-  if (recentFails(db, loginName, now) >= MAX_FAILS) {
+export function login(db: DatabaseSync, loginRaw: string, password: string, now: number, ttlMs = DEFAULT_TTL_MS, ipRaw: string = 'unknown'): string {
+  const loginName = normalizeLogin(loginRaw);
+  const ip = normalizeIp(ipRaw);
+  if (recentPairFails(db, loginName, ip, now) >= MAX_FAILS || recentIpFails(db, ip, now) >= MAX_FAILS_PER_IP) {
     audit(db, null, 'auth.login.blocked', 'denied');
     throw new AuthError(BLOCKED);
   }
@@ -59,7 +79,7 @@ export function login(db: DatabaseSync, loginName: string, password: string, now
     { user_id: number; password_hash: string } | undefined;
   // при неизвестном логине всё равно считаем хеш — одинаковое время и ответ
   const ok = verifyPassword(String(password), row?.password_hash ?? DUMMY) && !!row;
-  db.prepare('INSERT INTO login_attempts(login, ts, ok) VALUES (?,?,?)').run(loginName, now, ok ? 1 : 0);
+  db.prepare('INSERT INTO login_attempts(login, ts, ok, ip) VALUES (?,?,?,?)').run(loginName, now, ok ? 1 : 0, ip);
   if (!ok) {
     audit(db, row?.user_id ?? null, 'auth.login.fail', 'denied');
     throw new AuthError(BAD_LOGIN);
@@ -71,6 +91,17 @@ export function login(db: DatabaseSync, loginName: string, password: string, now
   return token;
 }
 const DUMMY = hashPassword('dummy-password-for-timing');
+
+/** Чистка: удаляет просроченные сессии (expires_at <= now). Возвращает сколько удалено. Живые не трогает. */
+export function purgeExpiredSessions(db: DatabaseSync, now: number): number {
+  const n = Number(db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(now).changes);
+  if (n > 0) audit(db, null, 'auth.sessions.purged', 'allowed');
+  return n;
+}
+/** Чистка старых попыток входа (старше окна блокировки — на блок уже не влияют). */
+export function purgeOldAttempts(db: DatabaseSync, now: number): number {
+  return Number(db.prepare('DELETE FROM login_attempts WHERE ts <= ?').run(now - WINDOW_MS).changes);
+}
 
 /** Роль — из БАЗЫ по сессии. Нет/просрочена → null. */
 export function currentUser(db: DatabaseSync, token: string, now: number): Actor | null {
