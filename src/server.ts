@@ -14,6 +14,7 @@ import {
 import { cancelMine, createSlot, enrollMe, myLessons, type LessonView, type Student } from './schedule.ts';
 import { MessageRejected, listThreads, openThread, postMessage, readThread, type Post } from './messages.ts';
 import { enterRoom, leaveRoom, roomState, postRoomMessage, callOwner, listOwnerCalls, setRecording, videoStub, RoomRefused } from './room.ts';
+import { ownerDashboard, readAuditPage, parsePeriod, AUDIT_DEFAULT_LIMIT } from './dashboard.ts';
 import { exportData, listConsents, revokeConsent } from './consent.ts';
 
 export const COOKIE = 'sid';
@@ -57,7 +58,7 @@ class HttpError extends Error {
 }
 
 // ---------- маршруты ----------
-type Ctx = { db: DatabaseSync; actor: Actor; now: number; params: string[]; body: Json; token: string };
+type Ctx = { db: DatabaseSync; actor: Actor; now: number; params: string[]; body: Json; token: string; query: URLSearchParams };
 type Route = { method: string; path: string; re: RegExp; roles: readonly Role[]; run: (c: Ctx) => { status?: number; body: Json } };
 const ALL: readonly Role[] = ['student', 'parent', 'teacher', 'owner'];
 
@@ -170,6 +171,19 @@ function buildRoutes(): Route[] {
   add('GET', '/api/audit', ['owner'], ({ db, actor }) =>
     ({ body: { entries: (readAudit(db, actor) as { id: number; ts: string; actor_id: number | null; action: string; target_type: string | null; target_id: number | null; outcome: string }[])
       .slice(-500).map(r => ({ id: r.id, ts: r.ts, actor_id: r.actor_id, action: r.action, target_type: r.target_type, target_id: r.target_id, outcome: r.outcome })) } }));
+
+  // Ф10: дашборд и постраничный журнал — строго владелец; чтение журнал не пополняет (см. dashboard.ts)
+  add('GET', '/api/owner/dashboard', ['owner'], ({ db, actor, now, query }) => {
+    const p = parsePeriod(query.get('from'), query.get('to'));
+    if (!p) throw new HttpError(400, 'bad_request', { field: 'period' });
+    return { body: ownerDashboard(db, actor, p, now) as unknown as Json };
+  });
+  add('GET', '/api/owner/audit', ['owner'], ({ db, actor, query }) => {
+    const lq = query.get('limit'), bq = query.get('before');
+    const limit = lq === null ? AUDIT_DEFAULT_LIMIT : int(lq, 'limit');
+    if (limit < 1) throw new HttpError(400, 'bad_request', { field: 'limit' });
+    return { body: readAuditPage(db, actor, limit, bq === null ? undefined : int(bq, 'before')) as unknown as Json };
+  });
   return R;
 }
 
@@ -287,7 +301,7 @@ export function createApp(db: DatabaseSync, opts: ServerOptions = {}): Server {
     if (!hit || !hit.r.roles.includes(actor!.role)) throw new HttpError(403, 'forbidden');
 
     if (mutating) await readJson();
-    const out = hit.r.run({ db, actor: actor!, now, params: hit.m.slice(1), body, token });
+    const out = hit.r.run({ db, actor: actor!, now, params: hit.m.slice(1), body, token, query: url.searchParams });
     const extra: Record<string, string> = path === '/api/logout' ? { 'Set-Cookie': `${COOKIE}=; ${cookieAttrs}; Max-Age=0` } : {};
     return send(res, out.status ?? 200, out.body, extra);
   }
