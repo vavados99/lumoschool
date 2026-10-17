@@ -1,4 +1,4 @@
-/* LUMOSCHOOL · B4 «Темрява». Ванільний JS без збірки.
+/* LUMOSCHOOL · B5 «Темрява». Ванільний JS без збірки.
    Люмо — вектор (SVG) з власним «ригом»: очі, повіки, брови, рот, руки, стиснення-розтягнення, дихання.
    Усі параметри плавно (300–500 мс) тягнуться до цілі настрою; світло сцени і літери заголовка рахуються від позиції ядра. */
 (() => {
@@ -71,18 +71,18 @@ const el = { rig:g('rig'), squash:g('squash'), tilt:g('tilt'), face:g('face'), a
   browL:g('browL'), browR:g('browR'), eyeL:g('eyeL'), eyeR:g('eyeR'), eyeLin:g('eyeLin'), eyeRin:g('eyeRin'), lidL:g('lidL'), lidR:g('lidR'),
   happyL:g('happyL'), happyR:g('happyR'), mouthFill:g('mouthFill'), mouthLine:g('mouthLine'), mouthClip:g('mouthClipPath'), tongue:g('tongue'), mouthG:g('mouthG'),
   coreG:g('coreG'), coreDisc:g('coreDisc'), innerGlow:g('innerGlow'), innerGlow2:g('innerGlow2'), zzz:g('zzz'),
-  lowL:g('lowL'), lowR:g('lowR'), cheekL:g('cheekL'), cheekR:g('cheekR'), fins:[...document.querySelectorAll('.finRim')], svg:g('lumo'), light:g('light'), pool:g('pool') };
+  lowL:g('lowL'), lowR:g('lowR'), cheekL:g('cheekL'), cheekR:g('cheekR'), fins:[...document.querySelectorAll('.finRim')], svg:g('lumo'), coreHot:g('coreHot'), ring:g('ring'), light:g('light'), pool:g('pool') };
 const EYE = { L:[158, 300], R:[248, 300] };   // обличчя опущене ≈ на 8–10 % висоти тіла
 
 /* Цілі настроїв. gx/gy = null → дивиться за курсором. */
 const E = {
   // bright — яскравість світла сцени (емоція); low — нижні повіки (частка ока); cheek — рум'янець
-  idle:      { lidL:.05, lidR:.05, tiltL:0, tiltR:0, happy:0, gx:null, gy:null, pupil:1, mw:26, mc:26, mo:0,   mt:0,  ms:0, bLy:0,  bRy:0,  bLa:0,  bRa:0,  tilt:0, sy:1, armL:24, armR:24, core:.85, zzz:0, bright:.6,  low:0,   cheek:0,  mx:0  },
-  joy:       { lidL:.04, lidR:.04, tiltL:0, tiltR:0, happy:0, gx:null, gy:null, pupil:1, mw:36, mc:40, mo:.22, mt:0,  ms:0, bLy:-9, bRy:-9, bLa:-6, bRa:-6, tilt:0, sy:1, armL:54, armR:54, core:1.1, zzz:0, bright:.85, low:.35, cheek:1,  mx:0  },
-  curious:   { lidL:0,   lidR:0,   tiltL:0, tiltR:0, happy:0, gx:.32,  gy:-1,   pupil:1, mw:26, mc:12, mo:.14, mt:0,  ms:0, bLy:-14,bRy:-6, bLa:-8, bRa:-8, tilt:0, sy:1, armL:40, armR:18, core:.95, zzz:0, bright:.7,  low:0,   cheek:0,  mx:0  },
-  think:     { lidL:.18, lidR:.1,  tiltL:-3,tiltR:3, happy:0, gx:-.9,  gy:-.85, pupil:1, mw:20, mc:3,  mo:0,   mt:3,  ms:0, bLy:-2, bRy:-13,bLa:8,  bRa:-2, tilt:-3,sy:1, armL:10, armR:10, core:.55, zzz:0, bright:.5,  low:0,   cheek:0,  mx:16 },
-  celebrate: { lidL:0,   lidR:0,   tiltL:0, tiltR:0, happy:0, gx:0,     gy:0,    pupil:1, mw:38, mc:44, mo:.5,  mt:0,  ms:0, bLy:-12,bRy:-12,bLa:-6, bRa:-6, tilt:0, sy:1, armL:120, armR:120, core:1.4, zzz:0, bright:1,   low:.12, cheek:1,  mx:0  },
-  sleepy:    { lidL:1,   lidR:1,   tiltL:0, tiltR:0, happy:0, gx:0,     gy:.55,  pupil:1, mw:24, mc:14, mo:0,   mt:0,  ms:0, bLy:24, bRy:24, bLa:8,  bRa:8,  tilt:0, sy:1, armL:14, armR:14, core:.5,  zzz:1, bright:.25, low:0,   cheek:0,  mx:0  }
+  idle:      { lidL:.05, lidR:.05, tiltL:0, tiltR:0, happy:0, gx:null, gy:null, pupil:1, mw:26, mc:26, mo:0,   mt:0,  ms:0, bLy:0,  bRy:0,  bLa:0,  bRa:0,  tilt:0, sy:1, armL:24, armR:24, core:.85, zzz:0, bright:.6,  low:0,   cheek:0,  mx:0, wv:0, bIn:0 },
+  joy:       { lidL:.04, lidR:.04, tiltL:0, tiltR:0, happy:0, gx:null, gy:null, pupil:1, mw:36, mc:40, mo:.22, mt:0,  ms:0, bLy:-9, bRy:-9, bLa:-6, bRa:-6, tilt:0, sy:1, armL:54, armR:54, core:1.1, zzz:0, bright:.85, low:.35, cheek:1,  mx:0, wv:0, bIn:0 },
+  curious:   { lidL:0,   lidR:0,   tiltL:0, tiltR:0, happy:0, gx:.32,  gy:-1,   pupil:1, mw:26, mc:12, mo:.14, mt:0,  ms:0, bLy:-14,bRy:-6, bLa:-8, bRa:-8, tilt:0, sy:1, armL:40, armR:18, core:.95, zzz:0, bright:.7,  low:0,   cheek:0,  mx:0, wv:0, bIn:0 },
+  think:     { lidL:.18, lidR:.1,  tiltL:-3,tiltR:3, happy:0, gx:-.9,  gy:-.85, pupil:1, mw:16, mc:3,  mo:0,   mt:0,  ms:0, bLy:-5, bRy:-5, bLa:6,  bRa:6,   tilt:-3,sy:1, armL:10, armR:10, core:.55, zzz:0, bright:.5,  low:0,   cheek:0,  mx:0, wv:1, bIn:5 },
+  celebrate: { lidL:0,   lidR:0,   tiltL:0, tiltR:0, happy:.9, gx:0,     gy:0,    pupil:1, mw:38, mc:44, mo:.5,  mt:0,  ms:0, bLy:-12,bRy:-12,bLa:-6, bRa:-6, tilt:0, sy:1, armL:145, armR:145, core:1.4, zzz:0, bright:1,   low:.12, cheek:1,  mx:0, wv:0, bIn:0 },
+  sleepy:    { lidL:1,   lidR:1,   tiltL:0, tiltR:0, happy:0, gx:0,     gy:.55,  pupil:1, mw:24, mc:14, mo:0,   mt:0,  ms:0, bLy:24, bRy:24, bLa:8,  bRa:8,  tilt:0, sy:1, armL:14, armR:14, core:.5,  zzz:1, bright:.25, low:0,   cheek:0,  mx:0, wv:0, bIn:0 }
 };
 const KEYS = Object.keys(E.idle);
 const cur = {}, tgt = {};
@@ -90,16 +90,17 @@ for (const k of KEYS) cur[k] = tgt[k] = E.idle[k] === null ? 0 : E.idle[k];
 cur.gx = cur.gy = tgt.gx = tgt.gy = 0;
 
 let emo = 'idle', pinned = false, backT = 0, lastAct = performance.now();
-const lay = { pop:-1, flash:0, blink:0, wave:0, jumpT:-1, lookX:0, lookY:0, pointerAt:-1e9, px:0, py:0, glanceX:0, glanceY:0, glanceUntil:0, nextGlance:0, startled:0 };
+const REST = { x:-.67, y:.33 };   // спокій: зіниці −6 px по x, +4 px по y — погляд на кнопку
+const lay = { pop:-1, flash:0, blink:0, wave:0, jumpT:-1, lookX:0, lookY:0, pointerAt:-1e9, px:0, py:0, glanceX:0, glanceY:0, glanceUntil:0, nextGlance:performance.now() + 8000, startled:0 };
 
 function setEmo(name, { hold = 0, pin = false } = {}) {
   if (!E[name]) return;
   clearTimeout(backT);
   emo = name; hero.dataset.emo = name; pinned = pin;
   Object.assign(tgt, E[name]);
-  if (E[name].gx === null) { tgt.gx = lay.lookX; tgt.gy = lay.lookY; }
+  if (E[name].gx === null) { const rest = name === 'idle' && now0() - lay.pointerAt >= 4500; tgt.gx = rest ? REST.x : lay.lookX; tgt.gy = rest ? REST.y : lay.lookY; }
   if (name === 'joy' && !RM) lay.pop = 0;                       // стиснення-розтягнення 0.94 / 1.06 за 220 мс
-  if (name === 'celebrate' && !RM) { lay.jumpT = 0; lay.flash = 1; setTimeout(() => { if (emo === 'celebrate') burst(); }, 120); }
+  if (name === 'celebrate' && !RM) { lay.jumpT = 0; lay.peakDone = false; setTimeout(() => { if (emo === 'celebrate') burst(); }, 120); }
   
   $$('#moods button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.emo === name)));
   if (hold) backT = setTimeout(() => setEmo(name === 'celebrate' ? 'joy' : 'idle', name === 'celebrate' ? { hold: 2200 } : {}), hold);
@@ -108,11 +109,13 @@ function setEmo(name, { hold = 0, pin = false } = {}) {
 }
 
 /* --- рот: квадратичні криві. mo — наскільки відкритий. --- */
-function mouthPath(w, mc, mo, mt, ms) {
+function mouthPath(w, mc, mo, mt, ms, wv) {
+  if (wv > .5) return `M${-w} 0Q${-w / 2} ${-9 * wv} 0 0T${w} 0`;   // думка: коротка хвиля по центру
   const top = mc, bot = mc + mo * 118;
   return `M${-w} 0Q${ms} ${top} ${w} ${mt}Q${ms} ${bot} ${-w} 0Z`;
 }
 const set = (n, a, v) => n.setAttribute(a, v);
+function now0() { return performance.now(); }
 
 /* --- кадр --- */
 let t0 = performance.now(), lastT = t0, frame = 0, coreXY = { x: 0, y: 0 };
@@ -124,9 +127,10 @@ function draw(dt, still) {
   const follow = E[emo].gx === null;
   if (follow) {
     const recent = now - lay.pointerAt < 4500;
-    if (!recent && !RM) {
+    if (!recent && RM && emo === 'idle') { tgt.gx = REST.x; tgt.gy = REST.y; }
+    else if (!recent && !RM) {
       if (now > lay.nextGlance) { lay.glanceX = rnd(-.9, .9); lay.glanceY = rnd(-.5, .4); lay.glanceUntil = now + rnd(900, 1700); lay.nextGlance = now + rnd(3200, 6500); }
-      if (now > lay.glanceUntil) { lay.glanceX = 0; lay.glanceY = 0; }
+      if (now > lay.glanceUntil) { lay.glanceX = emo === 'idle' ? REST.x : 0; lay.glanceY = emo === 'idle' ? REST.y : 0; }
       tgt.gx = lay.glanceX; tgt.gy = lay.glanceY;
     } else { tgt.gx = lay.lookX; tgt.gy = lay.lookY; }
   }
@@ -139,15 +143,18 @@ function draw(dt, still) {
   let sy = cur.sy * (1 + breath), y = 0, sxMul = 1;
   // радість: «поп» 0.94 → 1.06 за 220 мс
   if (lay.pop >= 0 && !RM) { lay.pop += dt; const p = lay.pop / .22; if (p >= 1) lay.pop = -1; else sy *= 1 - .06 * Math.sin(p * Math.PI * 2); }
-  // свято: стрибок −24 px за 380 мс (easeOutBack з перельотом), падіння 340 мс, 3 стрибки
+  // свято: підйом 380 мс (easeOutBack) → пік пози 400 мс (розтяг 0.92 / 1.10, спалах) → падіння 340 мс → посадка; 3 стрибки
+  if (emo === 'celebrate' && RM) { y = -32; sy *= 1.10; sxMul = .92 / (1 / Math.sqrt(sy)); }
   if (lay.jumpT >= 0 && !RM) {
     lay.jumpT += dt;
-    if (lay.jumpT > 3.3) lay.jumpT = -1;
+    if (lay.jumpT > 3.9) lay.jumpT = -1;
     else {
-      const P = 1.1, tt = lay.jumpT % P, H = 24;
-      if (tt < .38) { const q = tt / .38 - 1, c1 = 1.70158, c3 = c1 + 1; y = -H * (1 + c3 * q * q * q + c1 * q * q); sy *= 1 + .06 * Math.sin(tt / .38 * Math.PI); }
-      else if (tt < .72) { const q = (tt - .38) / .34; y = -H * (1 - q * q); }
-      else if (tt < .86) { const q = (tt - .72) / .14; sy *= 1 - .08 * Math.sin(q * Math.PI); }
+      const P = 1.3, tt = lay.jumpT % P, H = 32;
+      const stretch = () => { sy *= 1.10; sxMul = .92 / (1 / Math.sqrt(sy)); };
+      if (tt < .38) { const q = tt / .38 - 1, c1 = 1.70158, c3 = c1 + 1; y = -H * (1 + c3 * q * q * q + c1 * q * q); sy *= 1 + .10 * Math.sin(tt / .38 * Math.PI / 2); sxMul = 1 - .08 * Math.sin(tt / .38 * Math.PI / 2); lay.peakDone = false; }
+      else if (tt < .78) { y = -H; stretch(); if (!lay.peakDone) { lay.peakDone = true; lay.flash = 1; } }
+      else if (tt < 1.12) { const q = (tt - .78) / .34; y = -H * (1 - q * q); sy *= 1 + .10 * (1 - q); sxMul = 1 - .08 * (1 - q); }
+      else if (tt < 1.26) { const q = (tt - 1.12) / .14; sy *= 1 - .08 * Math.sin(q * Math.PI); }
     }
   }
   const sx = (1 / Math.sqrt(sy)) * sxMul;
@@ -179,10 +186,10 @@ function draw(dt, still) {
     set(el['lid' + s], 'transform', `translate(0 ${(-56 + lid * 96).toFixed(2)}) rotate(${(cur['tilt' + s] * (s === 'L' ? 1 : -1)).toFixed(1)})`);
     const hp = el['happy' + s]; set(hp, 'transform', `translate(${ex + gx * .6} ${ey + 8 + gy * .5})`); set(hp, 'opacity', clamp(cur.happy * 1.2 - .1, 0, 1).toFixed(3));
     const br_ = el['brow' + s]; const by = cur['b' + s + 'y'], ba = cur['b' + s + 'a'];
-    set(br_, 'transform', `translate(${ex + gx * .5} ${ey - 57 + by + gy * .4}) rotate(${(s === 'L' ? ba : -ba).toFixed(1)})`);
+    set(br_, 'transform', `translate(${ex + gx * .5 + (s === 'L' ? cur.bIn : -cur.bIn)} ${ey - 57 + by + gy * .4}) rotate(${(s === 'L' ? ba : -ba).toFixed(1)})`);
   }
   // рот
-  const w = cur.mw, d = mouthPath(w, cur.mc, cur.mo, cur.mt, cur.ms);
+  const w = cur.mw, d = mouthPath(w, cur.mc, cur.mo, cur.mt, cur.ms, cur.wv);
   set(el.mouthLine, 'd', d); set(el.mouthClip, 'd', d); set(el.mouthFill, 'd', d);
   set(el.mouthFill, 'opacity', clamp(cur.mo * 5, 0, 1).toFixed(2));
   set(el.tongue, 'cx', cur.ms.toFixed(1)); set(el.tongue, 'cy', (cur.mc + cur.mo * 118 * .55 + cur.mt * .25 - 4).toFixed(1));
@@ -191,38 +198,55 @@ function draw(dt, still) {
   // руки
   lay.wave = Math.max(0, lay.wave - dt / 1.6);
   const wv = Math.sin(t * 13) * 24 * lay.wave;
-  const flap = emo === 'celebrate' && !RM ? Math.sin(t * 9) * 8 : 0;
-  set(el.armL, 'transform', `translate(66 300) rotate(${(cur.armL + wv + flap).toFixed(1)})`);
-  set(el.armR, 'transform', `translate(334 300) rotate(${(-(cur.armR) - flap).toFixed(1)})`);
+  const flap = emo === 'celebrate' && !RM ? Math.sin(t * 9) * 3 : 0;
+  set(el.armL, 'transform', `translate(56 300) rotate(${(cur.armL + wv + flap).toFixed(1)})`);
+  set(el.armR, 'transform', `translate(344 300) rotate(${(-(cur.armR) - flap).toFixed(1)})`);
   // ядро
   const pulse = cur.core * (1 + (RM ? 0 : .07 * br) + (emo === 'celebrate' && !RM ? .08 * Math.sin(t * 9) : 0));
   const fs = .62 + .55 * pulse, fx = RM ? 0 : .045 * Math.sin(t * 7.3), fy = RM ? 0 : .06 * Math.sin(t * 5.1 + 1);
   set(el.coreG, 'transform', `translate(206 ${(150 + (1 - fs) * 40).toFixed(1)}) scale(${(fs * (1 + fx)).toFixed(3)} ${(fs * (1 + fy)).toFixed(3)})`);
-  set(el.coreG, 'opacity', clamp(.55 + pulse * .45, 0, 1).toFixed(2));
-  set(el.innerGlow, 'opacity', clamp(pulse * .8, 0, 1).toFixed(2)); set(g('halo'), 'opacity', clamp(.2 + pulse * .4, 0, .75).toFixed(2));
-  set(el.innerGlow2, 'opacity', clamp(pulse * .62, 0, 1).toFixed(2));
-  set(g('browGlow'), 'opacity', clamp(pulse * .62, 0, .95).toFixed(2));
+  set(el.coreG, 'opacity', clamp(.6 + pulse * .5, 0, 1).toFixed(2));
+  set(el.innerGlow, 'opacity', clamp(pulse * .5, 0, .8).toFixed(2)); set(g('halo'), 'opacity', clamp(.05 + pulse * .12, 0, .3).toFixed(2));
+  set(el.innerGlow2, 'opacity', clamp(pulse * .5, 0, .8).toFixed(2));
+  set(g('browGlow'), 'opacity', clamp(pulse * .35, 0, .6).toFixed(2));
   const bri = clamp(cur.bright, 0, 1);
-  set(el.rig, 'style', `filter:brightness(${(.42 + .58 * bri).toFixed(3)})`);
+  set(el.rig, 'style', `filter:brightness(${Math.min(1, .75 + .4 * bri).toFixed(3)})`);
   for (const f of el.fins) f.setAttribute('opacity', (.25 + .6 * bri).toFixed(2));
   set(g('rimCrisp'), 'opacity', (.3 + .6 * bri).toFixed(2));
   const zy = RM ? 0 : (t * 14) % 22;
   set(el.zzz, 'opacity', clamp(cur.zzz, 0, 1).toFixed(2)); set(el.zzz, 'transform', `translate(0 ${-zy.toFixed(1)})`);
 
-  // світло сцени: радіальне свічення від центру Люмо; яскравість = емоція, на святі — спалах 300 мс
-  const sr_ = el.svg.getBoundingClientRect(), hr = hero.getBoundingClientRect();
-  const cx = sr_.left + sr_.width / 2 - hr.left, cy = sr_.top + sr_.height * .62 - hr.top;
+  // світло сцени: радіальне свічення з ЯДРА Люмо (пік у джерелі); яскравість = --lum = емоція; на святі — спалах 300 мс на піку стрибка
+  const hr = hero.getBoundingClientRect(), cr = el.coreHot.getBoundingClientRect();
+  const cx = cr.left + cr.width / 2 - hr.left, cy = cr.top + cr.height / 2 - hr.top;
   coreXY.x = cx; coreXY.y = cy;
   lay.flash = Math.max(0, lay.flash - dt / .3);
+  if (RM && emo === 'celebrate') lay.flash = .6;
   const lp = Math.max(cur.bright, .05);
+  // --lum керує всією сценою: ореол, тло, рядки 1–2 заголовка, хмарка, акценти
+  const ta = clamp((lp - .25) / .35, 0, 1), tb = clamp((lp - .25) / .75, 0, 1);
+  const mix = (c1, c2, tt) => c1.map((v, i) => Math.round(v + (c2[i] - v) * tt)).join(',');
+  hero.style.setProperty('--lum', lp.toFixed(3));
+  hero.style.setProperty('--bg1', `rgb(${mix([21,14,25],[30,20,36],ta)})`);
+  hero.style.setProperty('--bg2', `rgb(${mix([28,18,33],[42,26,46],ta)})`);
+  hero.style.setProperty('--hb', `rgb(${mix([110,97,104],[185,169,156],ta)})`);
+  hero.style.setProperty('--ink-live', `rgb(${mix([176,164,155],[251,239,223],ta)})`);
+  hero.style.setProperty('--ink2-live', `rgb(${mix([144,130,142],[214,195,206],ta)})`);
+  hero.style.setProperty('--hg', `rgb(${mix([150,125,110],[217,183,154],ta)})`);
+  hero.style.setProperty('--bub', `rgba(${mix([232,217,198],[243,226,204],tb)},${(.85 + .15 * tb).toFixed(3)})`);
+  hero.style.setProperty('--acc-live', `rgb(${mix([214,104,60],[255,122,69],ta)})`);
+  document.body.style.background = `rgb(${mix([21,14,25],[30,20,36],ta)})`;
   const pulseL = 1 + (RM ? 0 : (sleepy ? .02 : .035) * br);
-  el.light.style.opacity = clamp(lp * pulseL, 0, 1).toFixed(3);
+  el.light.style.opacity = clamp(lp * 1.2 * pulseL, 0, 1).toFixed(3);
   el.light.style.filter = lay.flash > 0 ? `brightness(${(1 + .45 * lay.flash).toFixed(3)})` : '';
   el.light.style.transform = `translate(${cx.toFixed(1)}px, ${cy.toFixed(1)}px) scale(${((.8 + lp * .2) * (1 + .18 * lay.flash)).toFixed(3)})`;
-  // світлова пляма на підлозі
-  const lift = clamp(-y / 24, 0, 1);
-  el.pool.style.opacity = (.55 * (.35 + .65 * lp)).toFixed(3);
-  el.pool.style.transform = `scale(${((.75 + lp * .25) * (1 - lift * .12)).toFixed(3)}, ${(.85 + lp * .15).toFixed(3)})`;
+  // кільце спалаху: #FFF4E0, радіус 1.6× тіла, згасає за 300 мс
+  set(el.ring, 'opacity', (lay.flash * .95).toFixed(3)); set(el.ring, 'fill-opacity', (lay.flash * .1).toFixed(3)); set(el.ring, 'r', (234 * (1.15 - .15 * lay.flash)).toFixed(1));
+  set(el.ring, 'transform', `translate(0 ${y.toFixed(2)})`);
+  // світлова пляма на підлозі: еліпс 250×24, screen, .5
+  const lift = clamp(-y / 32, 0, 1);
+  el.pool.style.opacity = (.5 * (.3 + .7 * lp) * (1 - .4 * lift)).toFixed(3);
+  el.pool.style.transform = `scale(${(.8 + lp * .2) * (1 - lift * .3)})`;
 
   // підсвічування літер заголовка: спад від відстані до ядра; у «що світиться» — від найближчої літери до найдальшої
   if (still || (frame++ & 1) === 0) {
@@ -339,10 +363,10 @@ function sizeCanvas() { DPR = Math.min(2, devicePixelRatio || 1); cv.width = her
 function burst() {
   if (RM) return;
   sizeCanvas();
-  const COLS = ['#FFD27A', '#FF8FA0'];
+  const COLS = ['#E0457B', '#E8A21A'];
   const hr = hero.getBoundingClientRect(), sr = el.svg.getBoundingClientRect();
   const x = sr.left - hr.left + sr.width * .5, y = sr.top - hr.top + sr.height * .52, R0 = sr.height * .36;
-  for (let i = 0; i < 22; i++) {
+  for (let i = 0; i < 30; i++) {
     const a = rnd(0, Math.PI * 2), v = rnd(260, 620), r0 = R0 * rnd(.75, 1.05);
     parts.push({ x: x + Math.cos(a) * r0 * .85, y: y + Math.sin(a) * r0, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 120, r: rnd(5, 11), life: 0, max: rnd(.7, .9), c: COLS[i % COLS.length], star: i % 4 === 0, rot: rnd(0, 6.28), vr: rnd(-6, 6) });
   }
@@ -353,13 +377,13 @@ function stepP(now) {
   const dt = Math.min(.04, (now - lastP) / 1000); lastP = now;
   cx2.setTransform(DPR, 0, 0, DPR, 0, 0); cx2.clearRect(0, 0, cv.width, cv.height);
   cx2.save(); cx2.beginPath(); cx2.rect(0, 0, cv.width / DPR, cv.height / DPR);
-  { const hr = hero.getBoundingClientRect(); for (const sel of ['#h1']) { const r = $(sel).getBoundingClientRect(); const pad = 14; cx2.rect(r.left - hr.left - pad, r.top - hr.top - pad, r.width + pad * 2, r.height + pad * 2); } }
+  { const hr = hero.getBoundingClientRect(); for (const [sel, pad] of [['#h1', 14], ['#bubble', 12], ['#lead', 10], ['#cta', 10], ['#cue', 10], ['.top', 8]]) { const r = $(sel).getBoundingClientRect(); if (!r.width) continue; cx2.rect(r.left - hr.left - pad, r.top - hr.top - pad, r.width + pad * 2, r.height + pad * 2); } }
   cx2.clip('evenodd');
   parts = parts.filter(p => p.life < p.max);
   for (const p of parts) {
     p.life += dt; p.vy += 420 * dt; p.vx *= 1 - 1.8 * dt; p.vy *= 1 - .9 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt;
     const a = clamp(1 - p.life / p.max, 0, 1);
-    cx2.globalAlpha = a; cx2.fillStyle = p.c; cx2.strokeStyle = 'rgba(42,26,46,.6)'; cx2.lineWidth = 1.5;
+    cx2.globalAlpha = a; cx2.fillStyle = p.c; cx2.strokeStyle = '#2A1A2E'; cx2.lineWidth = 1.5;
     if (p.star) { cx2.save(); cx2.translate(p.x, p.y); cx2.rotate(p.rot); const s = p.r * 1.8; cx2.beginPath(); cx2.moveTo(0, -s); cx2.lineTo(s * .28, -s * .28); cx2.lineTo(s, 0); cx2.lineTo(s * .28, s * .28); cx2.lineTo(0, s); cx2.lineTo(-s * .28, s * .28); cx2.lineTo(-s, 0); cx2.lineTo(-s * .28, -s * .28); cx2.closePath(); cx2.fill(); cx2.stroke(); cx2.restore(); }
     else { cx2.beginPath(); cx2.arc(p.x, p.y, p.r * (.5 + a * .5), 0, 6.283); cx2.fill(); cx2.stroke(); }
   }
