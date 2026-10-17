@@ -7,7 +7,8 @@ CREATE TABLE users (
   role         TEXT NOT NULL CHECK (role IN ('student','parent','teacher','owner')),
   display_name TEXT NOT NULL,          -- имя без фамилии
   birth_date   TEXT,                   -- ISO; для расчёта «до 16 лет»
-  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  anonymized_at TEXT                   -- Ф7: удалён по просьбе: имя, дата рождения, контакты, вход стёрты
 );
 
 -- СЕЙФ: единственное место для почты и телефона.
@@ -40,7 +41,10 @@ CREATE TABLE parental_consents (
   parent_id  INTEGER NOT NULL REFERENCES users(id),
   scope      TEXT NOT NULL DEFAULT 'data_processing',
   granted_at TEXT NOT NULL,
-  revoked_at TEXT
+  revoked_at TEXT,
+  text_version TEXT NOT NULL DEFAULT 'v1',   -- Ф7: версия текста, который человек видел и принял
+  revoked_by   INTEGER REFERENCES users(id), -- Ф7: кто отозвал
+  retain_until TEXT                          -- Ф7: ISO; после отзыва/удаления строка хранится как доказательство согласия до этой даты
 );
 
 CREATE TABLE lessons (
@@ -61,6 +65,7 @@ CREATE TABLE lesson_enrollments (
   status     TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','cancelled')),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   cancelled_at TEXT,
+  retain_until TEXT,                   -- Ф7: ISO; у удалённого человека запись об уроке хранится (учёт) до этой даты, потом чистится
   PRIMARY KEY (lesson_id, student_id)
 );
 CREATE INDEX lessons_teacher_idx ON lessons(teacher_id, starts_at);
@@ -153,3 +158,11 @@ INSERT INTO role_permissions(role, permission) VALUES
  ('student','message.thread.send'),('student','message.thread.read'),
  ('parent','message.thread.send'),('parent','message.thread.read'),
  ('teacher','message.thread.send'),('teacher','message.thread.read');
+
+-- Ф7: согласия и данные. Типы согласий = parental_consents.scope: 'data_processing' (обязательно для записи ребёнка до 16),
+-- 'lesson_recording' (запись уроков; выключено по умолчанию). Журнал согласий = audit_log (consent.*) + строки parental_consents.
+-- Права: преподавателю — ничего из этого; владельцу НЕТ 'data.export_any' (целиком читать чужие данные) — выдаётся строкой.
+INSERT INTO role_permissions(role, permission) VALUES
+ ('parent','consent.revoke'),('parent','consent.read_child'),('parent','data.export'),('parent','data.erase'),
+ ('student','consent.read_own'),('student','data.export'),('student','data.erase'),
+ ('owner','consent.read_any'),('owner','data.erase_any'),('owner','retention.run');

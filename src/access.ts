@@ -46,7 +46,7 @@ function substituteSeesStudent(db: DatabaseSync, userId: number, studentId: numb
   if (!ids.length) return false;
   return !!db.prepare(`SELECT 1 FROM lesson_enrollments WHERE student_id = ? AND status = 'active' AND lesson_id IN (${ids.map(() => '?').join(',')})`).get(studentId, ...ids);
 }
-function isParentOf(db: DatabaseSync, parentId: number, childId: number): boolean {
+export function isParentOf(db: DatabaseSync, parentId: number, childId: number): boolean {
   return !!db.prepare('SELECT 1 FROM parent_child WHERE parent_id = ? AND child_id = ?').get(parentId, childId);
 }
 export function isMinor(db: DatabaseSync, userId: number, today = new Date()): boolean {
@@ -107,12 +107,29 @@ export function getContacts(db: DatabaseSync, a: Actor, targetId: number): Conta
   return r ?? { email: null, phone: null };
 }
 
-export function grantConsent(db: DatabaseSync, a: Actor, childId: number) {
-  guard(db, a, 'consent.grant', 'student', childId, () => isParentOf(db, a.id, childId));
-  db.prepare(`INSERT INTO parental_consents(child_id, parent_id, granted_at) VALUES (?,?,datetime('now'))`).run(childId, a.id);
+/** Типы согласий. Для записи на урок обязателен только 'data_processing'. */
+export const CONSENT_SCOPES = ['data_processing', 'lesson_recording'] as const;
+export type ConsentScope = typeof CONSENT_SCOPES[number];
+/** Версия текста согласия, показанного сейчас (текст изменился — новая версия и новое согласие). */
+export const CURRENT_CONSENT_VERSION = '2026-10-v1';
+
+/** Родитель даёт согласие за СВОЕГО ребёнка. Повтор (родитель, ребёнок, тип) при активном согласии строк не плодит. */
+export function grantConsent(db: DatabaseSync, a: Actor, childId: number, scope: ConsentScope = 'data_processing',
+                             textVersion: string = CURRENT_CONSENT_VERSION, now = Date.now()) {
+  inTx(db, () => {
+    guard(db, a, 'consent.grant', 'student', childId, () => isParentOf(db, a.id, childId));
+    if (!CONSENT_SCOPES.includes(scope) || typeof textVersion !== 'string' || !textVersion.trim()) {
+      audit(db, a, 'consent.bad_input', 'student', childId, 'denied');
+      throw new Denied('bad consent scope or text version');
+    }
+    if (db.prepare('SELECT 1 FROM parental_consents WHERE child_id=? AND parent_id=? AND scope=? AND revoked_at IS NULL').get(childId, a.id, scope)) return;
+    db.prepare('INSERT INTO parental_consents(child_id, parent_id, scope, granted_at, text_version) VALUES (?,?,?,?,?)')
+      .run(childId, a.id, scope, new Date(now).toISOString(), textVersion.trim());
+    audit(db, a, `consent.granted.${scope}`, 'student', childId, 'allowed');
+  });
 }
-export function hasActiveConsent(db: DatabaseSync, childId: number): boolean {
-  return !!db.prepare('SELECT 1 FROM parental_consents WHERE child_id = ? AND revoked_at IS NULL').get(childId);
+export function hasActiveConsent(db: DatabaseSync, childId: number, scope: ConsentScope = 'data_processing'): boolean {
+  return !!db.prepare('SELECT 1 FROM parental_consents WHERE child_id = ? AND scope = ? AND revoked_at IS NULL').get(childId, scope);
 }
 
 export class ScheduleError extends Error {
