@@ -30,6 +30,7 @@ test('prod со слабым секретом → отказ (короткий, 
     'short', 'a'.repeat(31), 'a'.repeat(64), 'abababababababababababababababababab', '1234567890'.repeat(5),
     'changeme' + 'Qw8Zk2Lp9Xv3'.repeat(3), 'my-SECRET-' + 'Qw8Zk2Lp9Xv3Rt'.repeat(3), 'Test' + 'Qw8Zk2Lp9Xv3Rt'.repeat(3),
     'password' + 'Qw8Zk2Lp9Xv3Rt'.repeat(3), 'Qw8Zk2Lp9Xv3Rt Qw8Zk2Lp9Xv3Rt Qw8Zk2Lp',
+    'Qw8Zk2Lp9Xv3RtYh7Bn4Mc6Jd1Gf5S',   // 30 разнообразных символов: ловит только порог длины
   ];
   for (const w of weak) {
     const m = msgOf(() => loadConfig(prod({ SESSION_SECRET: w })));
