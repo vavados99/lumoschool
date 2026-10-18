@@ -32,7 +32,17 @@ export function backupDb(src: DatabaseSync | string, dir: string, opts: { keep?:
     db.exec('PRAGMA busy_timeout = 10000');
     writeFileSync(tmp, '', { mode: 0o600 });          // пустой файл с правами 0600 ДО записи данных
     chmodSync(tmp, 0o600);
-    db.prepare('VACUUM INTO ?').run(tmp);
+    // Ф18: SQLite иногда отвечает «database is locked» мгновенно, минуя busy_timeout (напр. при смене журнала/hot journal у соседнего писателя,
+    // особенно при нагрузке). Копия — идемпотентная операция над временным файлом, поэтому безопасно повторить несколько раз.
+    for (let attempt = 1; ; attempt++) {
+      try { db.prepare('VACUUM INTO ?').run(tmp); break; }
+      catch (e) {
+        if (attempt >= 6 || !/locked|busy/i.test((e as Error).message)) throw e;
+        try { unlinkSync(tmp); } catch { /* нет файла */ }
+        writeFileSync(tmp, '', { mode: 0o600 });
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100 * attempt);
+      }
+    }
     chmodSync(tmp, 0o600);
     const chk = new DatabaseSync(tmp, { readOnly: true });
     try {

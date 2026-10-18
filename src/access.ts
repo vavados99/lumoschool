@@ -31,10 +31,17 @@ export function guard(db: DatabaseSync, a: Actor, perm: string, tt: string | nul
 
 const yes = () => true;
 
-function teacherSharesLesson(db: DatabaseSync, teacherId: number, studentId: number): boolean {
-  return !!db.prepare(
-    `SELECT 1 FROM lessons l JOIN lesson_enrollments e ON e.lesson_id = l.id
-     WHERE l.teacher_id = ? AND e.student_id = ? AND e.status = 'active'`).get(teacherId, studentId);
+/** Ф18: после окончания урока преподаватель сохраняет доступ к ученику ещё недолго (дописать отзыв, ответить родителю), затем он закрывается. */
+export const TEACHER_ACCESS_GRACE_MS = 2 * 3_600_000;
+/** Окно доступа преподавателя к ученикам урока: урок не отменён и (конец + TEACHER_ACCESS_GRACE_MS) ещё не прошёл. */
+export function lessonOpenForTeacher(l: { starts_at: string; duration_min: number; status: string }, now: number): boolean {
+  return l.status !== 'cancelled' && toMs(l.starts_at) + l.duration_min * 60_000 + TEACHER_ACCESS_GRACE_MS > now;
+}
+export function teacherSharesLesson(db: DatabaseSync, teacherId: number, studentId: number, now: number = Date.now()): boolean {
+  const rows = db.prepare(
+    `SELECT l.starts_at, l.duration_min, l.status FROM lessons l JOIN lesson_enrollments e ON e.lesson_id = l.id
+     WHERE l.teacher_id = ? AND e.student_id = ? AND e.status = 'active'`).all(teacherId, studentId) as { starts_at: string; duration_min: number; status: string }[];
+  return rows.some(r => lessonOpenForTeacher(r, now));
 }
 /** Ф5: уроки, на которых user — заменяющий СЕЙЧАС: замена назначена, урок не отменён/не проведён и ещё не закончился. */
 export function activeSubstituteLessons(db: DatabaseSync, userId: number, now: number): number[] {
@@ -81,7 +88,7 @@ export function getProfile(db: DatabaseSync, a: Actor, targetId: number, now = D
   switch (a.role) {
     case 'student': perm = 'own_profile.read'; ok = a.id === targetId; break;
     case 'parent': perm = 'child_profile.read'; ok = isParentOfChild(db, a.id, targetId, now); break;
-    case 'teacher': perm = 'lesson_students.read'; ok = teacherSharesLesson(db, a.id, targetId) || substituteSeesStudent(db, a.id, targetId, now); break;
+    case 'teacher': perm = 'lesson_students.read'; ok = teacherSharesLesson(db, a.id, targetId, now) || substituteSeesStudent(db, a.id, targetId, now); break;
     case 'owner': perm = 'students.read_all'; ok = true; break;
     default: perm = 'none'; ok = false;
   }
@@ -100,9 +107,12 @@ export function listStudents(db: DatabaseSync, a: Actor, now = Date.now()): Prof
     case 'owner': return db.prepare(`${base} ORDER BY u.id`).all() as Profile[];
     case 'teacher': {
       const sub = activeSubstituteLessons(db, a.id, now);   // замена: только эти уроки
-      return db.prepare(
-        `${base} JOIN lesson_enrollments e ON e.student_id = u.id JOIN lessons l ON l.id = e.lesson_id
-         WHERE (l.teacher_id = ? OR l.id IN (${sub.length ? sub.map(() => '?').join(',') : 'NULL'})) AND e.status = 'active' ORDER BY u.id`).all(a.id, ...sub) as Profile[];
+      const rows = db.prepare(
+        `SELECT DISTINCT u.id, u.display_name, s.level, l.starts_at, l.duration_min, l.status FROM users u JOIN students s ON s.user_id = u.id
+         JOIN lesson_enrollments e ON e.student_id = u.id JOIN lessons l ON l.id = e.lesson_id
+         WHERE (l.teacher_id = ? OR l.id IN (${sub.length ? sub.map(() => '?').join(',') : 'NULL'})) AND e.status = 'active' ORDER BY u.id`).all(a.id, ...sub) as (Profile & { starts_at: string; duration_min: number; status: string })[];
+      const seen = new Set<number>();   // Ф18: только уроки внутри окна доступа (не отменённые, не старше конца + TEACHER_ACCESS_GRACE_MS)
+      return rows.filter(r => lessonOpenForTeacher(r, now) && !seen.has(r.id) && seen.add(r.id)).map(r => ({ id: r.id, display_name: r.display_name, level: r.level }));
     }
     case 'parent': return db.prepare(
       `${base} JOIN parent_child pc ON pc.child_id = u.id WHERE pc.parent_id = ? ORDER BY u.id`).all(a.id)
@@ -306,7 +316,7 @@ export function sendMessage(db: DatabaseSync, a: Actor, toId: number, body: stri
         `SELECT 1 FROM parent_child pc JOIN lesson_enrollments e ON e.student_id = pc.child_id
          JOIN lessons l ON l.id = e.lesson_id WHERE pc.parent_id = ? AND l.teacher_id = ? AND e.status = 'active'`).get(toId, a.id);
     }
-    if (to.role === 'student') return !isMinor(db, toId) && teacherSharesLesson(db, a.id, toId);
+    if (to.role === 'student') return !isMinor(db, toId) && teacherSharesLesson(db, a.id, toId, Date.now());
     return false;
   };
   guard(db, a, 'message.send', 'user', toId, ok);
@@ -315,5 +325,5 @@ export function sendMessage(db: DatabaseSync, a: Actor, toId: number, body: stri
 
 export function readAudit(db: DatabaseSync, a: Actor) {
   guard(db, a, 'audit.read', 'audit_log', null, yes);
-  return db.prepare('SELECT * FROM audit_log ORDER BY id').all();
+  return db.prepare('SELECT * FROM audit_log ORDER BY id').all();   // только ядро/тесты; HTTP читает постранично через dashboard.readAuditPage
 }

@@ -15,6 +15,8 @@
   "error.room_closed": "Místnost lekce je zavřená.",
   "error.wait_for_adult": "Počkejte prosím, až se k lekci připojí dospělá osoba.",
   "error.child_would_be_alone": "Dítě nemůže zůstat v místnosti samo.",
+  "error.second_adult_required": "Individuální lekce s dítětem začne, až když je v místnosti rodič nebo majitel.",
+  "error.second_adult_would_leave": "Nemůžete odejít: dítě by zůstalo samo s učitelem.",
   "error.observer_read_only": "Jste pozorovatel a nemůžete psát do chatu.",
   "error.recording_consent_missing": "Nahrávání není možné: chybí požadovaný souhlas.",
   "role.student": "Žák",

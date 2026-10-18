@@ -8,17 +8,19 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { DatabaseSync } from 'node:sqlite';
 import { AuthError, BAD_LOGIN, BLOCKED, DELAY_STEP_MS, currentUser, login, loginDelayMs, logout } from './auth.ts';
 import {
-  Denied, ScheduleError, NotAvailable, getContacts, listStudents, readAudit, grantConsent, CONSENT_SCOPES,
+  Denied, ScheduleError, NotAvailable, getContacts, listStudents, grantConsent, CONSENT_SCOPES,
   type Actor, type Role, type ConsentScope,
 } from './access.ts';
 import { cancelMine, createSlot, enrollMe, myLessons, type LessonView, type Student } from './schedule.ts';
-import { MessageRejected, listThreads, openThread, postMessage, readThread, type Post } from './messages.ts';
+import { MessageRejected, listThreads, listNotifications, openThread, postMessage, readThread, type Post } from './messages.ts';
 import { enterRoom, leaveRoom, roomState, postRoomMessage, callOwner, listOwnerCalls, setRecording, videoStub, RoomRefused } from './room.ts';
 import { ownerDashboard, readAuditPage, parsePeriod, AUDIT_DEFAULT_LIMIT } from './dashboard.ts';
 import { t, hasKey, pickLang, fromAcceptLanguage } from './i18n.ts';
 import { exportData, listConsents, revokeConsent } from './consent.ts';
 
 export const COOKIE = 'sid';
+/** Ф18: имя куки сессии. Secure-режим → префикс __Host- (требует Secure, Path=/, без Domain — всё это у нас выполнено). */
+export const cookieNameFor = (secure: boolean) => (secure ? `__Host-${COOKIE}` : COOKIE);
 export const DEFAULT_MAX_BODY = 16 * 1024;
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 
@@ -49,8 +51,8 @@ function serializeLesson(role: Role, l: LessonView): Json {
 
 /** Реплика ветки. Преподавателю родитель показывается ролью без имени. */
 function serializePost(role: Role, p: Post & { role?: string }): Json {
-  const out: Json = { id: p.id, from_id: p.from_id, body: p.body, created_at: p.created_at };
-  if (!(role === 'teacher' && p.role === 'parent')) out.from_name = p.from_name;
+  const out: Json = { id: p.id, body: p.body, created_at: p.created_at };
+  if (!(role === 'teacher' && p.role === 'parent')) { out.from_id = p.from_id; out.from_name = p.from_name; }   // Ф18: преподавателю — ни имени, ни id родителя
   if (p.role) out.from_role = p.role;
   return out;
 }
@@ -104,9 +106,10 @@ function buildRoutes(): Route[] {
   add('GET', '/api/lessons', ALL, ({ db, actor, now, token }) =>
     ({ body: { lessons: myLessons(db, token, now).map(l => serializeLesson(actor.role, l)) } }));
   add('POST', '/api/lessons', ['teacher'], ({ db, now, token, body }) => {
+    const aud = body.audience === undefined ? 'minor' : str(body.audience, 'audience', 10);
+    if (aud !== 'minor' && aud !== 'adult') throw new HttpError(400, 'bad_request', { field: 'audience' });   // Ф18: 'toString' и прочие служебные строки — 400, не 500
     const id = createSlot(db, token, now, str(body.starts_at, 'starts_at', 40),
-      body.duration_min === undefined ? 50 : int(body.duration_min, 'duration_min'),
-      body.audience === undefined ? 'minor' : (str(body.audience, 'audience', 10) as 'minor'));
+      body.duration_min === undefined ? 50 : int(body.duration_min, 'duration_min'), aud);
     return { status: 201, body: { id } };
   });
   add('POST', '/api/lessons/:id/enroll', ['student', 'parent', 'owner'], ({ db, now, token, params, body }) => {
@@ -118,21 +121,23 @@ function buildRoutes(): Route[] {
     return { body: { ok: true } };
   });
 
-  add('GET', '/api/threads', ['student', 'parent', 'teacher', 'owner'], ({ db, actor }) =>
-    ({ body: { threads: listThreads(db, actor).map(id => ({ id })) } }));
-  add('POST', '/api/threads', ['student', 'parent', 'teacher'], ({ db, actor, body }) => {
-    const id = openThread(db, actor, int(body.teacher_id, 'teacher_id'), int(body.student_id, 'student_id'));
+  add('GET', '/api/threads', ['student', 'parent', 'teacher', 'owner'], ({ db, actor, now }) =>
+    ({ body: { threads: listThreads(db, actor, now).map(id => ({ id })) } }));
+  add('POST', '/api/threads', ['student', 'parent', 'teacher'], ({ db, actor, now, body }) => {
+    const id = openThread(db, actor, int(body.teacher_id, 'teacher_id'), int(body.student_id, 'student_id'), now);
     return { status: 201, body: { id } };
   });
-  add('GET', '/api/threads/:id', ['student', 'parent', 'teacher', 'owner'], ({ db, actor, params }) => {
-    const posts = readThread(db, actor, int(params[0], 'id')) as (Post & { role?: string })[];
+  add('GET', '/api/threads/:id', ['student', 'parent', 'teacher', 'owner'], ({ db, actor, now, params }) => {
+    const posts = readThread(db, actor, int(params[0], 'id'), now) as (Post & { role?: string })[];
     const roles = new Map((db.prepare('SELECT id, role FROM users').all() as { id: number; role: string }[]).map(u => [u.id, u.role]));
     return { body: { posts: posts.map(p => serializePost(actor.role, { ...p, role: roles.get(p.from_id) })) } };
   });
-  add('POST', '/api/threads/:id/messages', ['student', 'parent', 'teacher'], ({ db, actor, params, body }) => {
-    const id = postMessage(db, actor, int(params[0], 'id'), str(body.body, 'body'));
+  add('POST', '/api/threads/:id/messages', ['student', 'parent', 'teacher'], ({ db, actor, now, params, body }) => {
+    const id = postMessage(db, actor, int(params[0], 'id'), str(body.body, 'body'), now);
     return { status: 201, body: { id } };
   });
+  // Ф18: уведомления родителю о репликах преподавателя ребёнку
+  add('GET', '/api/notifications', ['parent'], ({ db, actor }) => ({ body: { notifications: listNotifications(db, actor) } }));
 
   // согласия
   const scopeOf = (v: unknown): ConsentScope => {
@@ -172,9 +177,8 @@ function buildRoutes(): Route[] {
   add('GET', '/api/room-calls', ['owner'], ({ db, actor }) =>
     ({ body: { calls: listOwnerCalls(db, actor).map(c => ({ id: c.id, ts: c.ts, lesson_id: c.lesson_id, caller_id: c.caller_id, caller_role: c.caller_role, caller_name: c.caller_name })) } }));
 
-  add('GET', '/api/audit', ['owner'], ({ db, actor }) =>
-    ({ body: { entries: (readAudit(db, actor) as { id: number; ts: string; actor_id: number | null; action: string; target_type: string | null; target_id: number | null; outcome: string }[])
-      .slice(-500).map(r => ({ id: r.id, ts: r.ts, actor_id: r.actor_id, action: r.action, target_type: r.target_type, target_id: r.target_id, outcome: r.outcome })) } }));
+  // Ф18: дубль /api/owner/audit. Тот же постраничный ридер: чтение журнал не пополняет, вся таблица не читается (лимит 500 → не более AUDIT_MAX_LIMIT).
+  add('GET', '/api/audit', ['owner'], ({ db, actor }) => ({ body: readAuditPage(db, actor, 500) as unknown as Json }));
 
   // Ф10: дашборд и постраничный журнал — строго владелец; чтение журнал не пополняет (см. dashboard.ts)
   add('GET', '/api/owner/dashboard', ['owner'], ({ db, actor, now, query }) => {
@@ -267,6 +271,7 @@ export function createApp(db: DatabaseSync, opts: ServerOptions = {}): Server {
   const clock = opts.now ?? Date.now;
   const routes = buildRoutes();
   const cookieAttrs = `Path=/; HttpOnly; SameSite=Strict${opts.secureCookie ? '; Secure' : ''}`;
+  const cookieName = cookieNameFor(!!opts.secureCookie);   // Ф18: за HTTPS — __Host-sid (браузер не примет с чужого поддомена/пути)
 
   async function handle(req: IncomingMessage, res: ServerResponse) {
     const url = new URL(req.url ?? '/', 'http://localhost');
@@ -279,7 +284,7 @@ export function createApp(db: DatabaseSync, opts: ServerOptions = {}): Server {
 
     // единственная публичная точка API — вход
     const isLogin = method === 'POST' && path === '/api/login';
-    const token = readCookie(req, COOKIE);
+    const token = readCookie(req, cookieName);
     const actor = isLogin ? null : currentUser(db, token, now);
     if (!isLogin && !actor) throw new HttpError(401, 'unauthorized');
 
@@ -306,7 +311,7 @@ export function createApp(db: DatabaseSync, opts: ServerOptions = {}): Server {
       const me = currentUser(db, t, now)!;
       const u = db.prepare('SELECT id, role, display_name FROM users WHERE id = ?').get(me.id) as { id: number; role: string; display_name: string };
       return send(res, 200, { id: u.id, role: u.role, display_name: u.display_name },
-        { 'Set-Cookie': `${COOKIE}=${t}; ${cookieAttrs}; Max-Age=${SESSION_TTL_MS / 1000}` });
+        { 'Set-Cookie': `${cookieName}=${t}; ${cookieAttrs}; Max-Age=${SESSION_TTL_MS / 1000}` });
     }
 
     // единая точка проверки роли: нет маршрута или роли в его списке → 403
@@ -320,7 +325,7 @@ export function createApp(db: DatabaseSync, opts: ServerOptions = {}): Server {
 
     if (mutating) await readJson();
     const out = hit.r.run({ db, actor: actor!, now, params: hit.m.slice(1), body, token, query: url.searchParams });
-    const extra: Record<string, string> = path === '/api/logout' ? { 'Set-Cookie': `${COOKIE}=; ${cookieAttrs}; Max-Age=0` } : {};
+    const extra: Record<string, string> = path === '/api/logout' ? { 'Set-Cookie': `${cookieName}=; ${cookieAttrs}; Max-Age=0` } : {};
     return send(res, out.status ?? 200, out.body, extra);
   }
 

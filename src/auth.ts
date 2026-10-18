@@ -85,7 +85,9 @@ export function loginDelayMs(db: DatabaseSync, ipRaw: string, now: number, stepM
 export function login(db: DatabaseSync, loginRaw: string, password: string, now: number, ttlMs = DEFAULT_TTL_MS, ipRaw: string = 'unknown'): string {
   const loginName = normalizeLogin(loginRaw);
   const ip = normalizeIp(ipRaw);
-  if (recentPairFails(db, loginName, ip, now) >= MAX_FAILS) {
+  const key = attemptKey(db, loginName);
+  db.prepare('DELETE FROM login_attempts WHERE ts <= ?').run(now - ATTEMPTS_AUTO_PURGE_MS);
+  if (recentPairFails(db, key, ip, now) >= MAX_FAILS) {
     audit(db, null, 'auth.login.blocked', 'denied');
     throw new AuthError(BLOCKED);
   }
@@ -93,7 +95,7 @@ export function login(db: DatabaseSync, loginRaw: string, password: string, now:
     { user_id: number; password_hash: string } | undefined;
   // при неизвестном логине всё равно считаем хеш — одинаковое время и ответ
   const ok = verifyPassword(String(password), row?.password_hash ?? DUMMY) && !!row;
-  db.prepare('INSERT INTO login_attempts(login, ts, ok, ip) VALUES (?,?,?,?)').run(loginName, now, ok ? 1 : 0, ip);
+  db.prepare('INSERT INTO login_attempts(login, ts, ok, ip) VALUES (?,?,?,?)').run(key, now, ok ? 1 : 0, ip);
   if (!ok) {
     audit(db, row?.user_id ?? null, 'auth.login.fail', 'denied');
     throw new AuthError(BAD_LOGIN);
@@ -115,6 +117,12 @@ export function purgeExpiredSessions(db: DatabaseSync, now: number): number {
 /** Чистка старых попыток входа (старше окна блокировки — на блок уже не влияют). */
 export function purgeOldAttempts(db: DatabaseSync, now: number): number {
   return Number(db.prepare('DELETE FROM login_attempts WHERE ts <= ?').run(now - WINDOW_MS).changes);
+}
+/** Ф18: попытки старше суток удаляются прямо при входе — чистка не зависит от внешнего запуска maintenance. */
+export const ATTEMPTS_AUTO_PURGE_MS = 24 * 3_600_000;
+/** Ф18: ключ попытки. Неизвестный логин (его могли набрать вместо пароля) в базу открытым текстом не пишем — только короткий хеш; счётчик по паре остаётся рабочим. */
+function attemptKey(db: DatabaseSync, loginName: string): string {
+  return db.prepare('SELECT 1 FROM credentials WHERE login = ?').get(loginName) ? loginName : `unknown:${sha256(loginName).slice(0, 16)}`;
 }
 
 /** Роль — из БАЗЫ по сессии. Нет/просрочена → null. */

@@ -410,6 +410,7 @@ test('таблица маршрутов и ролей совпадает с эт
     'POST /api/lessons/:id/enroll owner,parent,student', 'POST /api/lessons/:id/cancel owner,parent,student',
     `GET /api/threads ${ALLR}`, 'POST /api/threads parent,student,teacher', `GET /api/threads/:id ${ALLR}`, 'POST /api/threads/:id/messages parent,student,teacher',
     'GET /api/consents/:id owner,parent,student', 'POST /api/consents/:id parent', 'POST /api/consents/:id/revoke parent',
+    'GET /api/notifications parent',   // Ф18
     'GET /api/export/:id owner,parent,student', 'GET /api/audit owner',
     // Ф9: комната урока
     `GET /api/rooms/:id ${ALLR}`, `POST /api/rooms/:id/enter ${ALLR}`, `POST /api/rooms/:id/leave ${ALLR}`, `GET /api/rooms/:id/video ${ALLR}`,

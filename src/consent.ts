@@ -162,6 +162,7 @@ export function eraseData(db: DatabaseSync, a: Actor, subjectId: number, now = D
       db.prepare('DELETE FROM msg_threads WHERE student_id = ?').run(subjectId);
     }
     db.prepare('DELETE FROM msg_posts WHERE from_id = ?').run(subjectId);
+    db.prepare('DELETE FROM parent_notifications WHERE parent_id = ? OR child_id = ?').run(subjectId, subjectId);   // Ф18: уведомления родителю
     db.prepare('DELETE FROM messages WHERE from_id = ? OR to_id = ?').run(subjectId, subjectId);
     // входы
     const login = db.prepare('SELECT login FROM credentials WHERE user_id = ?').get(subjectId) as { login: string } | undefined;
@@ -208,6 +209,7 @@ export function runRetention(db: DatabaseSync, a: Actor, opts: RetentionOptions 
     const res: RetentionResult = { messages: 0, threads: 0, login_attempts: 0, consents: 0, enrollments: 0, users: 0 };
     res.messages = ch('DELETE FROM msg_posts WHERE created_at < ?', msgCut);
     res.threads = ch(`DELETE FROM msg_threads WHERE created_at < ? AND id NOT IN (SELECT thread_id FROM msg_posts)`, msgCut);
+    ch('DELETE FROM parent_notifications WHERE created_at < ?', msgCut);   // Ф18: уведомления живут столько же, сколько сообщения
     res.login_attempts = ch('DELETE FROM login_attempts WHERE ts < ?', now - loginDays * DAY);
     res.consents = ch('DELETE FROM parental_consents WHERE retain_until IS NOT NULL AND retain_until < ? AND revoked_at IS NOT NULL', iso(now));
     res.enrollments = ch('DELETE FROM lesson_enrollments WHERE retain_until IS NOT NULL AND retain_until < ?', iso(now));

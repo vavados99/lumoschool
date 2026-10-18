@@ -2,7 +2,7 @@
 // Ветка = (преподаватель, ученик). Участников не храним: доступ вычисляется из базы КАЖДЫЙ раз
 // (сняли связь/запись — доступ пропал сразу). Тела сообщений в журнал не попадают.
 import type { DatabaseSync } from 'node:sqlite';
-import { audit, guard, inTx, Denied, isUnderAdultAge, ADULT_AGE, type Actor } from './access.ts';
+import { audit, guard, inTx, Denied, isUnderAdultAge, ADULT_AGE, teacherSharesLesson, type Actor } from './access.ts';
 
 export { ADULT_AGE };   // моложе 18 = ребёнок (строже, чем 16 в isMinor из access.ts); единое определение — в access.ts
 export const MAX_BODY = 2000;
@@ -71,13 +71,27 @@ function teacherHasLesson(db: DatabaseSync, teacherId: number, studentId: number
 }
 type Thread = { id: number; teacher_id: number; student_id: number };
 
-/** Может ли актёр участвовать в ветке (читать и писать). Ребёнок без родителя — ветка закрыта для всех. */
-function isParticipant(db: DatabaseSync, a: Actor, th: Thread): boolean {
+/** Ф18: родитель получает уведомление о КАЖДОЙ реплике преподавателя его ребёнку (в ветке и в чате комнаты). Текста в уведомлении нет. */
+export function notifyParents(db: DatabaseSync, childId: number, kind: 'thread_message' | 'room_message', refId: number) {
+  if (!isChild(db, childId)) return;
+  const ins = db.prepare('INSERT INTO parent_notifications(parent_id, child_id, kind, ref_id) VALUES (?,?,?,?)');
+  for (const p of parentsOf(db, childId)) ins.run(p, childId, kind, refId);
+}
+
+/** Ф18: уведомления родителя о репликах преподавателя его ребёнку (только свои; без текста). Каждое чтение в журнале — через guard. */
+export function listNotifications(db: DatabaseSync, a: Actor): { id: number; child_id: number; kind: string; ref_id: number; created_at: string }[] {
+  guard(db, a, 'notifications.read', 'parent_notifications', null, () => a.role === 'parent');
+  return db.prepare('SELECT id, child_id, kind, ref_id, created_at FROM parent_notifications WHERE parent_id = ? ORDER BY id DESC LIMIT 200').all(a.id) as never;
+}
+
+/** Может ли актёр участвовать в ветке (читать и писать). Ребёнок без родителя — ветка закрыта для всех.
+ *  Ф18: преподаватель — только пока урок не отменён и не вышло окно доступа после его конца (TEACHER_ACCESS_GRACE_MS). */
+function isParticipant(db: DatabaseSync, a: Actor, th: Thread, now: number = Date.now()): boolean {
   const child = isChild(db, th.student_id);
   if (child && parentsOf(db, th.student_id).length === 0) return false;
   if (!teacherHasLesson(db, th.teacher_id, th.student_id)) return false;   // нет урока — ветка мертва для всех
   switch (a.role) {
-    case 'teacher': return a.id === th.teacher_id;
+    case 'teacher': return a.id === th.teacher_id && teacherSharesLesson(db, th.teacher_id, th.student_id, now);
     case 'student': return a.id === th.student_id;
     case 'parent': return child && parentsOf(db, th.student_id).includes(a.id);   // родитель взрослого ученика не видит
     default: return false;
@@ -85,12 +99,12 @@ function isParticipant(db: DatabaseSync, a: Actor, th: Thread): boolean {
 }
 
 /** Открыть (или найти) ветку преподаватель–ученик. Открывает: сам преподаватель, сам ученик, родитель ребёнка. */
-export function openThread(db: DatabaseSync, a: Actor, teacherId: number, studentId: number): number {
+export function openThread(db: DatabaseSync, a: Actor, teacherId: number, studentId: number, now: number = Date.now()): number {
   return inTx(db, () => {
     const probe: Thread = { id: 0, teacher_id: teacherId, student_id: studentId };
     const isStudent = db.prepare(`SELECT 1 FROM users WHERE id = ? AND role = 'student'`).get(studentId);
     const isTeacher = db.prepare(`SELECT 1 FROM users WHERE id = ? AND role = 'teacher'`).get(teacherId);
-    guard(db, a, 'message.thread.send', 'thread', null, () => !!isStudent && !!isTeacher && isParticipant(db, a, probe));
+    guard(db, a, 'message.thread.send', 'thread', null, () => !!isStudent && !!isTeacher && isParticipant(db, a, probe, now));
     const ex = db.prepare('SELECT id FROM msg_threads WHERE teacher_id = ? AND student_id = ?').get(teacherId, studentId) as { id: number } | undefined;
     if (ex) return ex.id;
     const id = Number(db.prepare('INSERT INTO msg_threads(teacher_id, student_id, created_by) VALUES (?,?,?)').run(teacherId, studentId, a.id).lastInsertRowid);
@@ -104,10 +118,10 @@ function loadThread(db: DatabaseSync, id: number): Thread | undefined {
 }
 
 /** Отправка. Права → принадлежность → фильтр каналов → запись. Отказ пишется в журнал БЕЗ текста. */
-export function postMessage(db: DatabaseSync, a: Actor, threadId: number, body: string): number {
+export function postMessage(db: DatabaseSync, a: Actor, threadId: number, body: string, now: number = Date.now()): number {
   return inTx(db, () => {
     const th = loadThread(db, threadId);
-    guard(db, a, 'message.thread.send', 'thread', threadId, () => !!th && isParticipant(db, a, th));
+    guard(db, a, 'message.thread.send', 'thread', threadId, () => !!th && isParticipant(db, a, th, now));
     const refuse = (reason: string, msg: string): never => {
       audit(db, a, `message.rejected.${reason}`, 'thread', threadId, 'denied');
       throw new MessageRejected(reason, msg);
@@ -118,6 +132,7 @@ export function postMessage(db: DatabaseSync, a: Actor, threadId: number, body: 
     if (leak) refuse(leak.reason, leak.message);
     const id = Number(db.prepare('INSERT INTO msg_posts(thread_id, from_id, body) VALUES (?,?,?)').run(threadId, a.id, body).lastInsertRowid);
     audit(db, a, 'message.sent', 'thread', threadId, 'allowed');
+    if (a.role === 'teacher') notifyParents(db, th!.student_id, 'thread_message', threadId);   // Ф18: родитель узнаёт о реплике преподавателя
     return id;
   });
 }
@@ -140,22 +155,22 @@ export function sendDirect(db: DatabaseSync, a: Actor, toId: number, body: strin
 export type Post = { id: number; from_id: number; from_name: string; body: string; created_at: string };
 
 /** Чтение ветки: участник — да; владелец — только при выданном праве message.read_any. Каждое чтение в журнале. */
-export function readThread(db: DatabaseSync, a: Actor, threadId: number): Post[] {
+export function readThread(db: DatabaseSync, a: Actor, threadId: number, now: number = Date.now()): Post[] {
   return inTx(db, () => {
     const th = loadThread(db, threadId);
     if (a.role === 'owner') guard(db, a, 'message.read_any', 'thread', threadId, () => !!th);
-    else guard(db, a, 'message.thread.read', 'thread', threadId, () => !!th && isParticipant(db, a, th));
+    else guard(db, a, 'message.thread.read', 'thread', threadId, () => !!th && isParticipant(db, a, th, now));
     return db.prepare(`SELECT p.id, p.from_id, u.display_name AS from_name, p.body, p.created_at
       FROM msg_posts p JOIN users u ON u.id = p.from_id WHERE p.thread_id = ? ORDER BY p.id`).all(threadId) as Post[];
   });
 }
 
 /** Мои ветки (id). Только те, где я участник сейчас. Владелец — пусто без права message.read_any. */
-export function listThreads(db: DatabaseSync, a: Actor): number[] {
+export function listThreads(db: DatabaseSync, a: Actor, now: number = Date.now()): number[] {
   const rows = db.prepare('SELECT id, teacher_id, student_id FROM msg_threads ORDER BY id').all() as Thread[];
   if (a.role === 'owner') {
     const has = db.prepare(`SELECT 1 FROM role_permissions WHERE role = 'owner' AND permission = 'message.read_any'`).get();
     return has ? rows.map(r => r.id) : [];
   }
-  return rows.filter(r => isParticipant(db, a, r)).map(r => r.id);
+  return rows.filter(r => isParticipant(db, a, r, now)).map(r => r.id);
 }

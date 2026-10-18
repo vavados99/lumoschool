@@ -2,7 +2,7 @@
 // Нет сессии / просрочена → отказ + запись в журнал. Контактных колонок нет ни в одном запросе.
 import type { DatabaseSync } from 'node:sqlite';
 import { currentUser } from './auth.ts';
-import { activeSubstituteLessons, isParentOfChild, type Actor, type Audience, DEFAULT_CAPACITY, setLessonCapacity, Denied, ScheduleError, audit, guard, enroll, cancelEnrollment, toMs } from './access.ts';
+import { activeSubstituteLessons, isParentOfChild, lessonOpenForTeacher, type Actor, type Audience, DEFAULT_CAPACITY, setLessonCapacity, Denied, ScheduleError, audit, guard, enroll, cancelEnrollment, toMs } from './access.ts';
 
 export type Student = { id: number; display_name: string; level: string | null };
 export type LessonView = {
@@ -27,7 +27,7 @@ export function createSlot(db: DatabaseSync, token: string, now: number, startsA
   const start = typeof startsAt === 'string' ? toMs(startsAt) : NaN;
   if (!Number.isFinite(start)) refuse('slot.bad_time', 'invalid start time');
   if (!Number.isInteger(durationMin) || durationMin < 15 || durationMin > 180) refuse('slot.bad_duration', 'duration must be 15..180 minutes');
-  if (!(audience in DEFAULT_CAPACITY)) refuse('slot.bad_audience', 'audience must be minor or adult');
+  if (!Object.hasOwn(DEFAULT_CAPACITY, audience)) refuse('slot.bad_audience', 'audience must be minor or adult');   // Ф18: `in` пропускал 'toString'
   if (start <= now) refuse('slot.past', 'slot is in the past');
   const end = start + durationMin * 60_000;
   const mine = db.prepare(`SELECT starts_at, duration_min FROM lessons WHERE teacher_id = ? AND status != 'cancelled'`).all(a.id) as { starts_at: string; duration_min: number }[];
@@ -88,5 +88,5 @@ export function myLessons(db: DatabaseSync, token: string, now: number): LessonV
       break;
     default: rows = []; studentsOf = () => [];
   }
-  return rows.map(r => ({ ...r, students: studentsOf(r.id) }));
+  return rows.map(r => ({ ...r, students: a.role === 'teacher' && !lessonOpenForTeacher(r, now) ? [] : studentsOf(r.id) }));   // Ф18: после окна доступа ученики урока преподавателю не показываются
 }

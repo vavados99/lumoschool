@@ -5,7 +5,7 @@
 // назначенный ИЛИ замещающий преподаватель этого урока (оба сохраняют доступ), владелец.
 import type { DatabaseSync } from 'node:sqlite';
 import { audit, guard, inTx, hasActiveConsent, toMs, ScheduleError, type Actor } from './access.ts';
-import { MessageRejected, MAX_BODY, findContactLeak, isChild } from './messages.ts';
+import { MessageRejected, MAX_BODY, findContactLeak, isChild, notifyParents } from './messages.ts';
 
 export const ENTER_EARLY_MS = 10 * 60_000;   // пропуск не раньше чем за 10 минут до начала
 
@@ -63,6 +63,13 @@ function present(db: DatabaseSync, lessonId: number): Present[] {
     WHERE p.lesson_id = ? AND p.left_at IS NULL ORDER BY p.user_id`).all(lessonId) as Present[];
 }
 const isSupervisor = (p: Present) => p.role === 'teacher' || p.role === 'owner' || p.role === 'parent';   // взрослые, отвечающие за детей
+/** Ф18: «второй взрослый» помимо преподавателя — родитель или владелец. */
+const isSecondAdult = (p: Present) => p.role === 'owner' || p.role === 'parent';
+/** Ф18: урок 1:1 — ровно одна активная запись, и это ребёнок (<18). */
+export function isSoleChildLesson(db: DatabaseSync, lessonId: number): boolean {
+  const rows = db.prepare(`SELECT student_id FROM lesson_enrollments WHERE lesson_id = ? AND status = 'active'`).all(lessonId) as { student_id: number }[];
+  return rows.length === 1 && isChild(db, rows[0].student_id);
+}
 /** Флаги безопасности. Выбрано так: «второй взрослый» = ещё один надзирающий (преподаватель/владелец/родитель).
  *  child_alone — ребёнок в комнате без единого надзирающего (жёстко не допускается: см. enterRoom/leaveRoom);
  *  child_without_second_adult — ребёнок есть, взрослых меньше двух (обычный урок «1 преподаватель + дети» поднимает этот флаг:
@@ -78,6 +85,11 @@ function flagsOf(db: DatabaseSync, lessonId: number) {
 export function enterRoom(db: DatabaseSync, a: Actor, lessonId: number, now = Date.now()) {
   return inTx(db, () => {
     const { l, mode } = admit(db, a, lessonId, 'room.enter', now);
+    // Ф18: правило двух взрослых. Урок 1:1 «ребёнок + преподаватель»: преподаватель и ребёнок входят, только когда в комнате уже есть родитель или владелец.
+    if ((mode === 'teacher' || (mode === 'participant' && isChild(db, a.id))) && isSoleChildLesson(db, lessonId) && !present(db, lessonId).some(isSecondAdult)) {
+      audit(db, a, 'room.enter.second_adult_required', 'lesson', lessonId, 'denied');
+      throw new RoomRefused('second_adult_required');
+    }
     if (mode === 'participant' && isChild(db, a.id) && !present(db, lessonId).some(isSupervisor)) {
       audit(db, a, 'room.enter.no_adult', 'lesson', lessonId, 'denied');
       throw new RoomRefused('wait_for_adult');
@@ -100,6 +112,11 @@ export function leaveRoom(db: DatabaseSync, a: Actor, lessonId: number, now = Da
       audit(db, a, 'room.leave.would_leave_child_alone', 'lesson', lessonId, 'denied');
       throw new RoomRefused('child_would_be_alone');
     }
+    if (me && isSecondAdult(me) && isSoleChildLesson(db, lessonId) && roomOpen(l!, now) && ps.some(p => p.role === 'teacher') && ps.some(p => p.role === 'student')
+        && ps.filter(isSecondAdult).length === 1) {
+      audit(db, a, 'room.leave.would_leave_one_on_one', 'lesson', lessonId, 'denied');   // Ф18: не оставить ребёнка наедине с преподавателем
+      throw new RoomRefused('second_adult_would_leave');
+    }
     db.prepare('UPDATE room_presence SET left_at = ? WHERE lesson_id = ? AND user_id = ? AND left_at IS NULL').run(new Date(now).toISOString(), lessonId, a.id);
     audit(db, a, 'room.left', 'lesson', lessonId, 'allowed');
   });
@@ -111,7 +128,7 @@ export type RoomState = {
   lesson: { id: number; starts_at: string; duration_min: number };
   me: { id: number; mode: Mode };
   recording: boolean;
-  participants: { id: number; display_name?: string; role: string }[];
+  participants: { id?: number; display_name?: string; role: string }[];
   flags: ReturnType<typeof flagsOf>;
   messages: RoomMessage[];
 };
@@ -122,7 +139,7 @@ function visibleParticipants(db: DatabaseSync, a: Actor, mode: Mode, lessonId: n
   const out: RoomState['participants'] = [];
   for (const p of ps) {
     if (mode === 'owner') out.push({ id: p.user_id, display_name: p.display_name, role: p.role });
-    else if (mode === 'teacher') out.push(p.role === 'parent' ? { id: p.user_id, role: 'parent' } : { id: p.user_id, display_name: p.display_name, role: p.role });   // родитель — без имени
+    else if (mode === 'teacher') out.push(p.role === 'parent' ? { role: 'parent' } : { id: p.user_id, display_name: p.display_name, role: p.role });   // Ф18: родитель — без имени и БЕЗ id
     else if (p.user_id === a.id) out.push({ id: p.user_id, display_name: p.display_name, role: p.role });
     else if (p.role === 'teacher' || p.role === 'owner') out.push({ id: p.user_id, display_name: p.display_name, role: p.role });
     else if (mode === 'observer' && kids.has(p.user_id)) out.push({ id: p.user_id, display_name: p.display_name, role: p.role });
@@ -172,7 +189,11 @@ export function postRoomMessage(db: DatabaseSync, a: Actor, lessonId: number, bo
     if (body.length > MAX_BODY) refuse('too_long', `Message is longer than ${MAX_BODY} characters.`);
     const leak = findContactLeak(body);
     if (leak) refuse(leak.reason, leak.message);
-    return Number(db.prepare('INSERT INTO room_messages(lesson_id, from_id, body) VALUES (?,?,?)').run(lessonId, a.id, body).lastInsertRowid);
+    const rid = Number(db.prepare('INSERT INTO room_messages(lesson_id, from_id, body) VALUES (?,?,?)').run(lessonId, a.id, body).lastInsertRowid);
+    if (a.role === 'teacher') {   // Ф18: родитель каждого ребёнка на уроке уведомляется о реплике преподавателя
+      for (const r of db.prepare(`SELECT student_id FROM lesson_enrollments WHERE lesson_id = ? AND status = 'active'`).all(lessonId) as { student_id: number }[]) notifyParents(db, r.student_id, 'room_message', lessonId);
+    }
+    return rid;
   });
 }
 

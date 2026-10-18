@@ -15,6 +15,8 @@
   "error.room_closed": "Pokój lekcji jest zamknięty.",
   "error.wait_for_adult": "Poczekaj, aż do lekcji dołączy osoba dorosła.",
   "error.child_would_be_alone": "Dziecko nie może przebywać w pokoju samo.",
+  "error.second_adult_required": "Lekcja jeden na jeden z dzieckiem zaczyna się dopiero, gdy w pokoju jest już rodzic lub właściciel.",
+  "error.second_adult_would_leave": "Nie możesz wyjść: dziecko zostałoby sam na sam z nauczycielem.",
   "error.observer_read_only": "Jesteś obserwatorem i nie możesz pisać na czacie.",
   "error.recording_consent_missing": "Nagrywanie jest niemożliwe: brak wymaganej zgody.",
   "role.student": "Uczeń",

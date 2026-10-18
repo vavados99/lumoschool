@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 const MIGRATIONS = [
   new URL('../db/schema.sql', import.meta.url),               // v1: Ф1–Ф7
   new URL('../db/migrations/002-room.sql', import.meta.url),  // v2: Ф9 комната урока
+  new URL('../db/migrations/003-notifications.sql', import.meta.url),  // v3: Ф18 уведомления родителю
 ];
 
 /** Версия схемы, которую знает этот код (= число миграций). */

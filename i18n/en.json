@@ -15,6 +15,8 @@
   "error.room_closed": "The lesson room is closed.",
   "error.wait_for_adult": "Please wait for an adult to join the lesson.",
   "error.child_would_be_alone": "A child cannot stay in the room alone.",
+  "error.second_adult_required": "A one-to-one lesson with a child needs a parent or the owner in the room first.",
+  "error.second_adult_would_leave": "You cannot leave: the child would be left alone with the teacher.",
   "error.observer_read_only": "You are an observer and cannot write in the chat.",
   "error.recording_consent_missing": "Recording is not possible: the required consent has not been given.",
   "role.student": "Student",

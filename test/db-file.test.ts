@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
-import { openDb } from '../src/db.ts';
+import { openDb, SCHEMA_VERSION } from '../src/db.ts';
 import { createApp, listen, COOKIE } from '../src/server.ts';
 
 const count = (db: DatabaseSync, t: string) => Number((db.prepare(`SELECT COUNT(*) c FROM ${t}`).get() as { c: number }).c);
@@ -24,7 +24,7 @@ test('seed в файл → openDb → сервер отвечает → повт
     const db = openDb(file);                       // раньше падало: table users already exists
     const users = count(db, 'users'), lessons = count(db, 'lessons');
     assert.ok(users >= 10 && lessons >= 4);
-    assert.equal(ver(db), 2);
+    assert.equal(ver(db), SCHEMA_VERSION);
     const server = createApp(db);
     const port = await listen(server, 0);
     try {
@@ -43,7 +43,7 @@ test('seed в файл → openDb → сервер отвечает → повт
       assert.equal(count(again, 'users'), users);
       assert.equal(count(again, 'lessons'), lessons);
       assert.equal((again.prepare(`SELECT value FROM settings WHERE key = 'probe'`).get() as { value: string }).value, '1');
-      assert.equal(ver(again), 2);
+      assert.equal(ver(again), SCHEMA_VERSION);
       assert.equal(count(again, 'role_permissions'), count(openDb(':memory:'), 'role_permissions'), 'права не задублировались');
       again.close();
     }
@@ -59,7 +59,7 @@ test('файл старой версии (схема v1 без user_version) м�
     old.prepare(`INSERT INTO users(role, display_name) VALUES ('owner', 'Olga')`).run();
     old.close();
     const db = openDb(file);
-    assert.equal(ver(db), 2);
+    assert.equal(ver(db), SCHEMA_VERSION);
     assert.equal(count(db, 'users'), 1);
     assert.equal((db.prepare('SELECT recording FROM lessons LIMIT 1').all() as unknown[]).length, 0, 'колонка recording есть');
     db.close();
