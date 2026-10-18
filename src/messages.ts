@@ -2,9 +2,9 @@
 // Ветка = (преподаватель, ученик). Участников не храним: доступ вычисляется из базы КАЖДЫЙ раз
 // (сняли связь/запись — доступ пропал сразу). Тела сообщений в журнал не попадают.
 import type { DatabaseSync } from 'node:sqlite';
-import { audit, guard, inTx, Denied, type Actor } from './access.ts';
+import { audit, guard, inTx, Denied, isUnderAdultAge, ADULT_AGE, type Actor } from './access.ts';
 
-export const ADULT_AGE = 18;   // моложе 18 = ребёнок (строже, чем 16 в isMinor из access.ts)
+export { ADULT_AGE };   // моложе 18 = ребёнок (строже, чем 16 в isMinor из access.ts); единое определение — в access.ts
 export const MAX_BODY = 2000;
 
 export class MessageRejected extends Denied {
@@ -14,12 +14,7 @@ export class MessageRejected extends Denied {
 
 /** Ребёнок = младше 18. Нет даты рождения — как ребёнок (безопаснее). */
 export function isChild(db: DatabaseSync, userId: number, today = new Date()): boolean {
-  const r = db.prepare('SELECT birth_date FROM users WHERE id = ?').get(userId) as { birth_date: string | null } | undefined;
-  if (!r?.birth_date) return true;
-  const b = new Date(r.birth_date);
-  if (Number.isNaN(b.getTime())) return true;
-  const age = today.getFullYear() - b.getFullYear() - (today < new Date(today.getFullYear(), b.getMonth(), b.getDate()) ? 1 : 0);
-  return age < ADULT_AGE;
+  return isUnderAdultAge(db, userId, today);
 }
 
 // ---------- фильтр личных каналов ----------

@@ -11,6 +11,7 @@ export type Config = {
   readonly backupDir: string | null;
   readonly backupKeep: number;
   readonly cookieSecure: boolean;
+  readonly trustedProxies: readonly string[];       // Ф17: TRUSTED_PROXY — адреса прокси через запятую; пусто = X-Forwarded-For не читаем
   readonly messageRetentionDays: number | null;      // null → значение по умолчанию из consent.ts
   readonly loginAttemptRetentionDays: number | null;
   readonly sessionSecret: string;                    // не перечисляется, в JSON/логах скрыт
@@ -63,6 +64,8 @@ export function loadConfig(env: Env = process.env, opts: LoadOptions = {}): Conf
   if (cs !== undefined && cs !== '0' && cs !== '1') throw new ConfigError('COOKIE_SECURE must be 0 or 1');
   const cookieSecure = cs === '1';
   if (mode === 'prod' && opts.secret !== false && !cookieSecure) throw new ConfigError('COOKIE_SECURE=1 is required in prod mode (HTTPS behind proxy)');
+  const trustedProxies = (get(env, 'TRUSTED_PROXY') ?? '').split(',').map(x => x.trim()).filter(Boolean);
+  if (trustedProxies.some(x => !/^[0-9a-fA-F:.]{2,45}$/.test(x) || x === '*')) throw new ConfigError('TRUSTED_PROXY must be a comma-separated list of IP addresses');
   const messageRetentionDays = intVar(env, 'RETENTION_MESSAGE_DAYS', 0, 36500, null);
   const loginAttemptRetentionDays = intVar(env, 'RETENTION_LOGIN_ATTEMPT_DAYS', 0, 36500, null);
 
@@ -79,7 +82,7 @@ export function loadConfig(env: Env = process.env, opts: LoadOptions = {}): Conf
     }
   }
 
-  const cfg = { mode, port, databasePath, backupDir, backupKeep, cookieSecure, messageRetentionDays, loginAttemptRetentionDays } as Config;
+  const cfg = { mode, port, databasePath, backupDir, backupKeep, cookieSecure, trustedProxies, messageRetentionDays, loginAttemptRetentionDays } as Config;
   // секрет — не перечисляемое поле: не попадёт в JSON.stringify, console.log, Object.keys
   Object.defineProperty(cfg, 'sessionSecret', { value: sessionSecret, enumerable: false });
   Object.defineProperty(cfg, 'toString', { value: () => `[Config mode=${mode}]`, enumerable: false });

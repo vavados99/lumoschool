@@ -266,7 +266,7 @@ test('согласия и запись: полный сценарий родит
   assert.equal((await s.call('ParentA', 'POST', `/api/consents/${d.KidA.id}`, {})).status, 201);
   assert.equal((await s.call('ParentA', 'POST', `/api/lessons/${lessons.a1}/enroll`, { student_id: d.KidA.id })).status, 200);
   assert.equal((await s.call('ParentA', 'POST', `/api/lessons/${lessons.a1}/cancel`, { student_id: d.KidA.id })).status, 200, 'урок через 3 дня: окно 24ч не мешает');
-  assert.equal((await s.call('ParentA', 'POST', `/api/lessons/${lessons.a1}/cancel`, { student_id: d.KidA.id })).status, 409, 'повторная отмена');
+  assert.equal((await s.call('ParentA', 'POST', `/api/lessons/${lessons.a1}/cancel`, { student_id: d.KidA.id })).status, 404, 'повторная отмена: один безличный ответ not_available');
 });
 
 test('преподаватель создаёт слот; сообщения и фильтр каналов', async () => {

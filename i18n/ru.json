@@ -8,6 +8,7 @@
   "error.forbidden": "У вас нет доступа к этому.",
   "error.invalid_credentials": "Неверный логин или пароль.",
   "error.too_many_attempts": "Слишком много попыток. Попробуйте позже.",
+  "error.not_available": "Это недоступно.",
   "error.conflict": "Это противоречит текущему расписанию.",
   "error.internal_error": "С нашей стороны произошла ошибка. Попробуйте позже.",
   "error.message_rejected": "Сообщение не отправлено, так как нарушает правила чата.",

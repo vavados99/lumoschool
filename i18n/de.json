@@ -8,6 +8,7 @@
   "error.forbidden": "Dafür hast du keine Berechtigung.",
   "error.invalid_credentials": "Falscher Benutzername oder falsches Passwort.",
   "error.too_many_attempts": "Zu viele Versuche. Bitte versuche es später erneut.",
+  "error.not_available": "Das ist nicht verfügbar.",
   "error.conflict": "Das passt nicht zum aktuellen Stundenplan.",
   "error.internal_error": "Auf unserer Seite ist ein Fehler aufgetreten. Bitte versuche es später erneut.",
   "error.message_rejected": "Die Nachricht wurde nicht gesendet, weil sie gegen die Chatregeln verstößt.",

@@ -30,7 +30,7 @@ test('транзакция: BEGIN IMMEDIATE до проверок, запись 
     },
   }) as DatabaseSync;
   const owner = actorOf(db, ids.owner);
-  const lesson = Number(db.prepare(`INSERT INTO lessons(teacher_id, starts_at) VALUES (?, '2099-03-03T10:00:00.000Z')`).run(ids.teacherA).lastInsertRowid);
+  const lesson = Number(db.prepare(`INSERT INTO lessons(teacher_id, starts_at, audience) VALUES (?, '2099-03-03T10:00:00.000Z', 'adult')`).run(ids.teacherA).lastInsertRowid);
   enroll(spy, owner, lesson, ids.adultC, NOW);
   assert.deepEqual(calls, ['BEGIN IMMEDIATE', 'COMMIT']);
   assert.deepEqual(writesInTx, [true]);
@@ -82,7 +82,7 @@ test('гонка: 10 процессов одновременно на урок �
       return id;
     };
     const owner = user('owner', 'O', null), teacher = user('teacher', 'T', null);
-    const lesson = (iso: string, max: number) => Number(db.prepare('INSERT INTO lessons(teacher_id, starts_at, max_students) VALUES (?,?,?)').run(teacher, iso, max).lastInsertRowid);
+    const lesson = (iso: string, max: number) => Number(db.prepare('INSERT INTO lessons(teacher_id, starts_at, max_students, audience) VALUES (?,?,?,?)').run(teacher, iso, max, 'adult').lastInsertRowid);
     const full = lesson('2099-05-05T10:00:00.000Z', 3);
     const students = Array.from({ length: 10 }, (_, i) => user('student', 'S' + i, '1990-01-01'));
     const l1 = lesson('2099-06-06T10:00:00.000Z', 6), l2 = lesson('2099-06-06T10:30:00.000Z', 6);  // пересекаются

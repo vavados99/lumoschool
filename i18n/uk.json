@@ -8,6 +8,7 @@
   "error.forbidden": "У вас немає доступу до цього.",
   "error.invalid_credentials": "Неправильний логін або пароль.",
   "error.too_many_attempts": "Забагато спроб. Спробуйте пізніше.",
+  "error.not_available": "Це недоступно.",
   "error.conflict": "Це суперечить поточному розкладу.",
   "error.internal_error": "З нашого боку сталася помилка. Спробуйте пізніше.",
   "error.message_rejected": "Повідомлення не надіслано, бо воно порушує правила чату.",

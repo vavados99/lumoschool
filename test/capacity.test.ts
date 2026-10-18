@@ -22,11 +22,17 @@ function setup() {
   // взрослые ученики без входа — записываем их от имени владельца
   const crowd: number[] = [];
   for (let i = 0; i < 10; i++) {
-    const id = Number(db.prepare(`INSERT INTO users(role, display_name, birth_date) VALUES ('student', ?, '1990-01-01')`).run(`Crowd${i}`).lastInsertRowid);
+    const id = Number(db.prepare(`INSERT INTO users(role, display_name, birth_date) VALUES ('student', ?, '2010-01-01')`).run(`Crowd${i}`).lastInsertRowid);
     db.prepare('INSERT INTO students(user_id, level) VALUES (?,?)').run(id, 'B1');
     crowd.push(id);
   }
-  return { db, ids, tok, crowd };
+  const grown: number[] = [];   // Ф17: взрослая группа — только взрослые ученики
+  for (let i = 0; i < 10; i++) {
+    const id = Number(db.prepare(`INSERT INTO users(role, display_name, birth_date) VALUES ('student', ?, '1990-01-01')`).run(`Grown${i}`).lastInsertRowid);
+    db.prepare('INSERT INTO students(user_id, level) VALUES (?,?)').run(id, 'B1');
+    grown.push(id);
+  }
+  return { db, ids, tok, crowd, grown };
 }
 const denied = (fn: () => unknown) => assert.throws(fn, (e: unknown) => e instanceof Denied);
 const refused = (fn: () => unknown) => assert.throws(fn, (e: unknown) => e instanceof ScheduleError);
@@ -49,7 +55,7 @@ test('лимит по умолчанию: 6 для детей/подростко
 });
 
 test('запись сверх лимита отклоняется и пишется в журнал; отмена освобождает место', () => {
-  const { db, ids, tok, crowd } = setup();
+  const { db, ids, tok, crowd, grown } = setup();
   const slot = createSlot(db, tok.teacherA, NOW, iso(NOW + 24 * H));                 // лимит 6
   for (let i = 0; i < 6; i++) enrollMe(db, tok.owner, NOW, slot, crowd[i]);
   refused(() => enrollMe(db, tok.owner, NOW, slot, crowd[6]));
@@ -61,8 +67,8 @@ test('запись сверх лимита отклоняется и пишет�
   refused(() => enrollMe(db, tok.owner, NOW, slot, crowd[7]));
   // взрослая группа: 8, девятый — отказ
   const ad = createSlot(db, tok.teacherB, NOW, iso(NOW + 30 * H), 50, 'adult');
-  for (let i = 0; i < 8; i++) enrollMe(db, tok.owner, NOW, ad, crowd[i]);
-  refused(() => enrollMe(db, tok.owner, NOW, ad, crowd[8]));
+  for (let i = 0; i < 8; i++) enrollMe(db, tok.owner, NOW, ad, grown[i]);
+  refused(() => enrollMe(db, tok.owner, NOW, ad, grown[8]));
   assert.equal(active(db, ad), 8);
 });
 
@@ -120,16 +126,16 @@ test('пересечение уроков у ученика: нельзя; вп�
   enrollMe(db, tok.owner, NOW, x, crowd[0]);
   enrollMe(db, tok.owner, NOW, edge, crowd[0]);
   // пересечение — отказ, и для самого ученика, и для владельца
-  enrollMe(db, tok.adultC, NOW, x, ids.adultC);
-  refused(() => enrollMe(db, tok.adultC, NOW, y, ids.adultC));
-  refused(() => enrollMe(db, tok.owner, NOW, y, ids.adultC));
+  enrollMe(db, tok.owner, NOW, x, crowd[1]);
+  refused(() => enrollMe(db, tok.owner, NOW, y, crowd[1]));
+  refused(() => enrollMe(db, tok.owner, NOW, y, crowd[1]));
   assert.ok(auditOf(db, ids).some(r => r.action === 'enroll.student_overlap' && r.outcome === 'denied' && r.target_id === y));
   assert.equal(active(db, y), 0);
   // другой ученик на то же время — можно
   enrollMe(db, tok.owner, NOW, y, ids.kidB);
   // отмена x освобождает время
-  cancelMine(db, tok.adultC, NOW, x, ids.adultC);
-  enrollMe(db, tok.adultC, NOW, y, ids.adultC);
+  cancelMine(db, tok.owner, NOW, x, crowd[1]);
+  enrollMe(db, tok.owner, NOW, y, crowd[1]);
   assert.equal(active(db, y), 2);
   // урок со статусом «отменён» не блокирует время
   const u = createSlot(db, tok.teacherA, NOW, iso(t0 + 10 * H), 60);

@@ -2,7 +2,7 @@
 // Нет сессии / просрочена → отказ + запись в журнал. Контактных колонок нет ни в одном запросе.
 import type { DatabaseSync } from 'node:sqlite';
 import { currentUser } from './auth.ts';
-import { activeSubstituteLessons, type Actor, type Audience, DEFAULT_CAPACITY, setLessonCapacity, Denied, ScheduleError, audit, guard, enroll, cancelEnrollment, toMs } from './access.ts';
+import { activeSubstituteLessons, isParentOfChild, type Actor, type Audience, DEFAULT_CAPACITY, setLessonCapacity, Denied, ScheduleError, audit, guard, enroll, cancelEnrollment, toMs } from './access.ts';
 
 export type Student = { id: number; display_name: string; level: string | null };
 export type LessonView = {
@@ -72,12 +72,16 @@ export function myLessons(db: DatabaseSync, token: string, now: number): LessonV
         WHERE e.student_id = ? AND e.status = 'active' ORDER BY l.starts_at, l.id`).all(a.id) as typeof rows;
       studentsOf = id => db.prepare(`${sel} AND u.id = ?`).all(id, a.id) as Student[];
       break;
-    case 'parent':
+    case 'parent': {
+      // Ф17: единый возрастной фильтр — только дети (<18); ученик, достигший 18, из выдачи родителя пропадает
+      const kids = (db.prepare('SELECT child_id FROM parent_child WHERE parent_id = ?').all(a.id) as { child_id: number }[])
+        .map(r => r.child_id).filter(c => isParentOfChild(db, a.id, c, now));
+      const inKids = kids.length ? kids.map(() => '?').join(',') : 'NULL';
       rows = db.prepare(`${cols} JOIN lesson_enrollments e ON e.lesson_id = l.id
-        JOIN parent_child pc ON pc.child_id = e.student_id
-        WHERE pc.parent_id = ? AND e.status = 'active' ORDER BY l.starts_at, l.id`).all(a.id) as typeof rows;
-      studentsOf = id => db.prepare(`${sel} AND u.id IN (SELECT child_id FROM parent_child WHERE parent_id = ?) ORDER BY u.id`).all(id, a.id) as Student[];
+        WHERE e.student_id IN (${inKids}) AND e.status = 'active' ORDER BY l.starts_at, l.id`).all(...kids) as typeof rows;
+      studentsOf = id => db.prepare(`${sel} AND u.id IN (${inKids}) ORDER BY u.id`).all(id, ...kids) as Student[];
       break;
+    }
     case 'owner':
       rows = db.prepare(`${cols} ORDER BY l.starts_at, l.id`).all() as typeof rows;
       studentsOf = id => db.prepare(`${sel} ORDER BY u.id`).all(id) as Student[];

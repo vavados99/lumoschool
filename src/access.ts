@@ -49,6 +49,20 @@ function substituteSeesStudent(db: DatabaseSync, userId: number, studentId: numb
 export function isParentOf(db: DatabaseSync, parentId: number, childId: number): boolean {
   return !!db.prepare('SELECT 1 FROM parent_child WHERE parent_id = ? AND child_id = ?').get(parentId, childId);
 }
+/** Единый порог «ребёнок» (младше 18). Нет/битая дата рождения — как ребёнок. Им пользуются и родительский фильтр, и чат/комната. */
+export const ADULT_AGE = 18;
+export function isUnderAdultAge(db: DatabaseSync, userId: number, today = new Date()): boolean {
+  const r = db.prepare('SELECT birth_date FROM users WHERE id = ?').get(userId) as { birth_date: string | null } | undefined;
+  if (!r?.birth_date) return true;
+  const b = new Date(r.birth_date);
+  if (Number.isNaN(b.getTime())) return true;
+  const age = today.getFullYear() - b.getFullYear() - (today < new Date(today.getFullYear(), b.getMonth(), b.getDate()) ? 1 : 0);
+  return age < ADULT_AGE;
+}
+/** Ф17: родитель вправе видеть/вести ученика, только пока тот ребёнок (<18). Единое правило для списков, записи и отмены. */
+export function isParentOfChild(db: DatabaseSync, parentId: number, childId: number, now = Date.now()): boolean {
+  return isParentOf(db, parentId, childId) && isUnderAdultAge(db, childId, new Date(now));
+}
 export function isMinor(db: DatabaseSync, userId: number, today = new Date()): boolean {
   const r = db.prepare('SELECT birth_date FROM users WHERE id = ?').get(userId) as { birth_date: string | null } | undefined;
   if (!r?.birth_date) return true; // неизвестный возраст = как ребёнок (безопаснее)
@@ -66,7 +80,7 @@ export function getProfile(db: DatabaseSync, a: Actor, targetId: number, now = D
   let perm: string, ok: boolean;
   switch (a.role) {
     case 'student': perm = 'own_profile.read'; ok = a.id === targetId; break;
-    case 'parent': perm = 'child_profile.read'; ok = isParentOf(db, a.id, targetId); break;
+    case 'parent': perm = 'child_profile.read'; ok = isParentOfChild(db, a.id, targetId, now); break;
     case 'teacher': perm = 'lesson_students.read'; ok = teacherSharesLesson(db, a.id, targetId) || substituteSeesStudent(db, a.id, targetId, now); break;
     case 'owner': perm = 'students.read_all'; ok = true; break;
     default: perm = 'none'; ok = false;
@@ -91,7 +105,8 @@ export function listStudents(db: DatabaseSync, a: Actor, now = Date.now()): Prof
          WHERE (l.teacher_id = ? OR l.id IN (${sub.length ? sub.map(() => '?').join(',') : 'NULL'})) AND e.status = 'active' ORDER BY u.id`).all(a.id, ...sub) as Profile[];
     }
     case 'parent': return db.prepare(
-      `${base} JOIN parent_child pc ON pc.child_id = u.id WHERE pc.parent_id = ? ORDER BY u.id`).all(a.id) as Profile[];
+      `${base} JOIN parent_child pc ON pc.child_id = u.id WHERE pc.parent_id = ? ORDER BY u.id`).all(a.id)
+      .filter(p => isUnderAdultAge(db, (p as Profile).id, new Date(now))) as Profile[];   // Ф17: только дети (<18)
     case 'student': return db.prepare(`${base} WHERE u.id = ?`).all(a.id) as Profile[];
     default: return [];
   }
@@ -134,6 +149,10 @@ export function hasActiveConsent(db: DatabaseSync, childId: number, scope: Conse
 
 export class ScheduleError extends Error {
   constructor(msg: string) { super(msg); this.name = 'ScheduleError'; }
+}
+/** Ф17: единый безличный отказ для чужого/несуществующего/прошедшего/полного урока. Наружу — один ответ not_available без текста (нет оракула). Причина — только в журнале. */
+export class NotAvailable extends ScheduleError {
+  constructor() { super('not_available'); this.name = 'NotAvailable'; }
 }
 export const toMs = (iso: string) => Date.parse(/(Z|[+-]\d\d:?\d\d)$/.test(iso) ? iso : iso + 'Z');
 
@@ -178,12 +197,12 @@ export function enroll(db: DatabaseSync, a: Actor, lessonId: number, studentId: 
 }
 function enrollTx(db: DatabaseSync, a: Actor, lessonId: number, studentId: number, now: number) {
   const perm = a.role === 'parent' ? 'child_lessons.enroll' : 'lessons.enroll';
-  const own = () => a.role === 'parent' ? isParentOf(db, a.id, studentId)
+  const own = () => a.role === 'parent' ? isParentOfChild(db, a.id, studentId, now)
     : a.role === 'student' ? a.id === studentId && !isMinor(db, studentId, new Date(now)) : true;
   guard(db, a, perm, 'lesson', lessonId, own);
   const refuse = (action: string, msg: string): never => {
     audit(db, a, action, 'lesson', lessonId, 'denied');
-    throw new ScheduleError(msg);
+    throw msg === 'already enrolled' ? new ScheduleError(msg) : new NotAvailable();   // Ф17: причина — только в журнале
   };
   const st = db.prepare('SELECT 1 FROM students WHERE user_id = ?').get(studentId);
   if (!st) refuse('enroll.not_student', 'target is not a student');
@@ -191,8 +210,10 @@ function enrollTx(db: DatabaseSync, a: Actor, lessonId: number, studentId: numbe
     audit(db, a, 'enroll.no_consent', 'student', studentId, 'denied');
     throw new Denied('no parental consent');
   }
-  const l = db.prepare('SELECT starts_at, status, duration_min, max_students FROM lessons WHERE id = ?').get(lessonId) as { starts_at: string; status: string; duration_min: number; max_students: number } | undefined;
+  const l = db.prepare('SELECT starts_at, status, duration_min, max_students, audience FROM lessons WHERE id = ?').get(lessonId) as { starts_at: string; status: string; duration_min: number; max_students: number; audience: Audience } | undefined;
   if (!l || l.status !== 'planned') refuse('enroll.no_lesson', 'lesson not available');
+  // Ф17: аудитория группы должна совпасть с возрастом ученика (minor — только <18, adult — только 18+). Отказ — в журнал, владельцу тоже.
+  if ((l!.audience === 'minor') !== isUnderAdultAge(db, studentId, new Date(now))) refuse('enroll.audience_mismatch', 'audience mismatch');
   if (toMs(l!.starts_at) <= now) refuse('enroll.past', 'lesson is in the past');
   const ex = db.prepare('SELECT status FROM lesson_enrollments WHERE lesson_id = ? AND student_id = ?').get(lessonId, studentId) as { status: string } | undefined;
   if (ex?.status === 'active') refuse('enroll.duplicate', 'already enrolled');
@@ -213,13 +234,13 @@ export function cancelEnrollment(db: DatabaseSync, a: Actor, lessonId: number, s
 }
 function cancelTx(db: DatabaseSync, a: Actor, lessonId: number, studentId: number, now: number) {
   const perm = a.role === 'parent' ? 'child_lessons.cancel' : 'lessons.cancel';
-  const own = () => a.role === 'parent' ? isParentOf(db, a.id, studentId) : a.role === 'student' ? a.id === studentId : true;
+  const own = () => a.role === 'parent' ? isParentOfChild(db, a.id, studentId, now) : a.role === 'student' ? a.id === studentId : true;
   guard(db, a, perm, 'lesson', lessonId, own);
   const r = db.prepare(`SELECT e.status, l.starts_at FROM lesson_enrollments e JOIN lessons l ON l.id = e.lesson_id
     WHERE e.lesson_id = ? AND e.student_id = ?`).get(lessonId, studentId) as { status: string; starts_at: string } | undefined;
   if (!r || r.status !== 'active' || toMs(r.starts_at) <= now) {
     audit(db, a, 'cancel.refused', 'lesson', lessonId, 'denied');
-    throw new ScheduleError('no active future enrollment');
+    throw new NotAvailable();
   }
   // Ф5: окно отмены. Ученик/родитель — не позже чем за N часов до начала; владелец — всегда.
   if (a.role !== 'owner' && toMs(r.starts_at) - now < getCancelWindowHours(db) * 3_600_000) {

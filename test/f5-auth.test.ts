@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { seed } from './seed.ts';
 import {
   register, login, currentUser, purgeExpiredSessions, purgeOldAttempts, normalizeLogin, AuthError,
-  MAX_FAILS, MAX_FAILS_PER_IP, WINDOW_MS, DEFAULT_TTL_MS,
+  MAX_FAILS, WINDOW_MS, loginDelayMs, DELAY_STEP_MS, DELAY_MAX_MS, DEFAULT_TTL_MS,
 } from '../src/auth.ts';
 import { readAudit } from '../src/access.ts';
 
@@ -97,14 +97,18 @@ test('блок пары логин+IP снимается через окно; н
   assert.ok(login(db, 'adultc', PW, T0 + WINDOW_MS + 10, DEFAULT_TTL_MS, '6.6.6.6'));
 });
 
-test('лимит по IP: перебор разных логинов с одного адреса блокирует этот адрес целиком, другие адреса — нет', () => {
+test('Ф17: много неудач с одного адреса НЕ блокируют вход (ни этому, ни другому логину); растёт только задержка', () => {
   const { db } = setup();
   // 20 неудач по разным (в т.ч. неизвестным) логинам, по 4 на логин: ни одна пара не достигает порога 5
-  for (let i = 0; i < MAX_FAILS_PER_IP; i++) threw(() => login(db, `ghost${i % 5}`, BAD, T0 + i, DEFAULT_TTL_MS, '9.9.9.9'));
-  assert.match(threw(() => login(db, 'adultc', PW, T0 + 100, DEFAULT_TTL_MS, '9.9.9.9')), /too many/);
-  assert.match(threw(() => login(db, 'boss', 'owner-password-1', T0 + 101, DEFAULT_TTL_MS, '9.9.9.9')), /too many/);
-  assert.ok(login(db, 'adultc', PW, T0 + 102, DEFAULT_TTL_MS, '3.3.3.3'));
-  assert.ok(login(db, 'adultc', PW, T0 + WINDOW_MS + 100, DEFAULT_TTL_MS, '9.9.9.9'));    // через окно — снова можно
+  for (let i = 0; i < 20; i++) threw(() => login(db, `ghost${i % 5}`, BAD, T0 + i, DEFAULT_TTL_MS, '9.9.9.9'));
+  assert.ok(login(db, 'adultc', PW, T0 + 100, DEFAULT_TTL_MS, '9.9.9.9'));      // верный пароль пускает
+  assert.ok(login(db, 'boss', 'owner-password-1', T0 + 101, DEFAULT_TTL_MS, '9.9.9.9'));
+  // задержка: нет у чистого адреса, нарастает вдвое, имеет потолок, после окна сбрасывается
+  assert.equal(loginDelayMs(db, '3.3.3.3', T0 + 102), 0);
+  const d6 = (() => { const x = setup(); for (let i = 0; i < 6; i++) threw(() => login(x.db, `g${i}`, BAD, T0, DEFAULT_TTL_MS, '8.8.8.8')); return loginDelayMs(x.db, '8.8.8.8', T0 + 1); })();
+  assert.equal(d6, DELAY_STEP_MS);                                                  // 6 неудач: порог 5 → первый шаг
+  assert.equal(loginDelayMs(db, '9.9.9.9', T0 + 102), DELAY_MAX_MS);                // 20 неудач: потолок
+  assert.equal(loginDelayMs(db, '9.9.9.9', T0 + WINDOW_MS + 100), 0);
 });
 
 test('IP нормализуется (регистр/пробелы), блок пишется в журнал без паролей', () => {

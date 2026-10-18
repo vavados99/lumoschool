@@ -6,9 +6,9 @@
 //  * ошибки — короткий код без стека и внутренних сообщений.
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { DatabaseSync } from 'node:sqlite';
-import { AuthError, BAD_LOGIN, BLOCKED, currentUser, login, logout } from './auth.ts';
+import { AuthError, BAD_LOGIN, BLOCKED, DELAY_STEP_MS, currentUser, login, loginDelayMs, logout } from './auth.ts';
 import {
-  Denied, ScheduleError, getContacts, listStudents, readAudit, grantConsent, CONSENT_SCOPES,
+  Denied, ScheduleError, NotAvailable, getContacts, listStudents, readAudit, grantConsent, CONSENT_SCOPES,
   type Actor, type Role, type ConsentScope,
 } from './access.ts';
 import { cancelMine, createSlot, enrollMe, myLessons, type LessonView, type Student } from './schedule.ts';
@@ -26,6 +26,9 @@ export type ServerOptions = {
   maxBody?: number;
   now?: () => number;
   secureCookie?: boolean;   // true за HTTPS-прокси (COOKIE_SECURE=1)
+  trustedProxies?: readonly string[];   // Ф17: адреса прокси (TRUSTED_PROXY), от которых верим X-Forwarded-For
+  loginDelayStepMs?: number;            // Ф17: шаг нарастающей задержки входа (тесты ставят 1)
+  loginDelayMaxMs?: number;             // Ф17: потолок задержки (по умолчанию 5 с)
 };
 
 // ---------- сериализаторы: белый список полей, отдельный на роль ----------
@@ -247,6 +250,18 @@ function readBody(req: IncomingMessage, limit: number): Promise<Json> {
   });
 }
 
+const stripV4 = (a: string) => a.replace(/^::ffff:/i, '').toLowerCase();
+/** Ф17: адрес клиента. X-Forwarded-For читаем ТОЛЬКО если соединение пришло от доверенного прокси; идём справа налево
+ *  и берём первый адрес, не принадлежащий доверенным (левые записи клиент подделывает сам). Иначе — адрес сокета. */
+export function clientIp(req: IncomingMessage, trusted: readonly string[]): string {
+  const remote = stripV4(req.socket.remoteAddress ?? 'unknown');
+  const set = new Set(trusted.map(stripV4));
+  if (!set.has(remote)) return remote;
+  const xff = String(req.headers['x-forwarded-for'] ?? '').split(',').map(x => stripV4(x.trim())).filter(Boolean);
+  for (let i = xff.length - 1; i >= 0; i--) if (!set.has(xff[i])) return xff[i];
+  return remote;
+}
+
 export function createApp(db: DatabaseSync, opts: ServerOptions = {}): Server {
   const maxBody = opts.maxBody ?? DEFAULT_MAX_BODY;
   const clock = opts.now ?? Date.now;
@@ -279,7 +294,9 @@ export function createApp(db: DatabaseSync, opts: ServerOptions = {}): Server {
 
     if (isLogin) {
       await readJson();
-      const ip = req.socket.remoteAddress ?? 'unknown';
+      const ip = clientIp(req, opts.trustedProxies ?? []);
+      const delay = loginDelayMs(db, ip, now, opts.loginDelayStepMs ?? DELAY_STEP_MS, opts.loginDelayMaxMs);
+      if (delay > 0) await new Promise(r => setTimeout(r, delay));
       let t: string;
       try { t = login(db, str(body.login, 'login', 200), str(body.password, 'password', 200), now, SESSION_TTL_MS, ip); }
       catch (e) {
@@ -325,6 +342,7 @@ export function createApp(db: DatabaseSync, opts: ServerOptions = {}): Server {
       if (e instanceof MessageRejected) return sendL(422, { error: 'message_rejected', reason: e.reason, message: e.message });
       if (e instanceof Denied) return sendL(403, { error: 'forbidden' });       // внутреннее имя права наружу не отдаём
       if (e instanceof RoomRefused) return sendL(409, { error: e.reason });
+      if (e instanceof NotAvailable) return sendL(404, { error: 'not_available' });   // Ф17: один ответ, без message
       if (e instanceof ScheduleError) return sendL(409, { error: 'conflict', message: e.message });
       if (e instanceof AuthError) return sendL(401, { error: 'unauthorized' });
       console.error('internal error:', e instanceof Error ? e.name : typeof e);       // в лог — только тип, не стек и не данные
@@ -354,6 +372,6 @@ if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).
   catch (e) { console.error(`config error: ${e instanceof ConfigError ? e.message : 'invalid configuration'}`); process.exit(1); }
   setSessionSecret(cfg.sessionSecret);
   const db = openDb(cfg.databasePath);
-  const port = await listen(createApp(db, { secureCookie: cfg.cookieSecure }), cfg.port);
+  const port = await listen(createApp(db, { secureCookie: cfg.cookieSecure, trustedProxies: cfg.trustedProxies }), cfg.port);
   console.log(`listening on 127.0.0.1:${port} (mode ${cfg.mode})`);
 }

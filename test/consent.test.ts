@@ -57,6 +57,7 @@ test('ребёнок до 16: без согласия записи нет; со�
   assert.ok(log(db, ids.owner).some(r => r.action === 'enroll.no_consent' && r.outcome === 'denied'));
   // взрослый без согласия записывается (проверка возраста не должна требовать родителя)
   db.prepare("UPDATE lesson_enrollments SET status='cancelled' WHERE student_id = ?").run(ids.adultC);
+  db.prepare("UPDATE lessons SET audience='adult' WHERE id = ?").run(ids.lessonB);   // Ф17: взрослый — только во взрослую группу
   enroll(db, actorOf(db, ids.adultC), ids.lessonB, ids.adultC);
 });
 

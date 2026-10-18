@@ -5,7 +5,12 @@ import { type Actor, type Role } from './access.ts';
 
 export const MIN_PASSWORD = 10;
 export const MAX_FAILS = 5;
-export const MAX_FAILS_PER_IP = 20;   // отдельный лимит на адрес (любые логины)
+/** Ф17: жёсткого бана по одному адресу НЕТ (за прокси это заблокировало бы всю школу). Вместо него — нарастающая
+ *  задержка ответа для адреса, у которого много неудач за окно: DELAY_FROM_FAILS неудач бесплатно, дальше step·2^(n-1), не больше DELAY_MAX_MS.
+ *  Жёсткий лимит остаётся только на связку логин+адрес (MAX_FAILS). */
+export const DELAY_FROM_FAILS = 5;
+export const DELAY_STEP_MS = 100;
+export const DELAY_MAX_MS = 5000;
 export const WINDOW_MS = 15 * 60 * 1000;
 export const DEFAULT_TTL_MS = 12 * 60 * 60 * 1000;
 export class AuthError extends Error {
@@ -65,16 +70,22 @@ function recentPairFails(db: DatabaseSync, login: string, ip: string, now: numbe
   return r.c;
 }
 /** Неудачи с одного адреса по любым логинам (включая неизвестные). */
-function recentIpFails(db: DatabaseSync, ip: string, now: number): number {
+export function recentIpFails(db: DatabaseSync, ip: string, now: number): number {
   const r = db.prepare('SELECT COUNT(*) AS c FROM login_attempts WHERE ip = ? AND ok = 0 AND ts > ?').get(ip, now - WINDOW_MS) as { c: number };
   return r.c;
+}
+
+/** Задержка (мс) перед проверкой входа для адреса: растёт вдвое с каждой неудачей сверх порога, с потолком. Никого не блокирует. */
+export function loginDelayMs(db: DatabaseSync, ipRaw: string, now: number, stepMs = DELAY_STEP_MS, maxMs = DELAY_MAX_MS): number {
+  const over = recentIpFails(db, normalizeIp(ipRaw), now) - DELAY_FROM_FAILS;
+  return over <= 0 ? 0 : Math.min(maxMs, stepMs * 2 ** Math.min(over - 1, 20));
 }
 
 /** Возвращает токен сессии (единственный раз; в базе только его sha256). */
 export function login(db: DatabaseSync, loginRaw: string, password: string, now: number, ttlMs = DEFAULT_TTL_MS, ipRaw: string = 'unknown'): string {
   const loginName = normalizeLogin(loginRaw);
   const ip = normalizeIp(ipRaw);
-  if (recentPairFails(db, loginName, ip, now) >= MAX_FAILS || recentIpFails(db, ip, now) >= MAX_FAILS_PER_IP) {
+  if (recentPairFails(db, loginName, ip, now) >= MAX_FAILS) {
     audit(db, null, 'auth.login.blocked', 'denied');
     throw new AuthError(BLOCKED);
   }

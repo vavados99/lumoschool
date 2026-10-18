@@ -8,6 +8,7 @@
   "error.forbidden": "K tomuto nemáte přístup.",
   "error.invalid_credentials": "Nesprávné přihlašovací jméno nebo heslo.",
   "error.too_many_attempts": "Příliš mnoho pokusů. Zkuste to později.",
+  "error.not_available": "To není dostupné.",
   "error.conflict": "Koliduje to s aktuálním rozvrhem.",
   "error.internal_error": "Na naší straně došlo k chybě. Zkuste to prosím později.",
   "error.message_rejected": "Zpráva nebyla odeslána, protože porušuje pravidla chatu.",

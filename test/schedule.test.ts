@@ -132,7 +132,7 @@ test('(д) без сессии / просроченная / поддельная
 
 test('(е1) двойная запись — отказ; после отмены можно снова', () => {
   const { db, ids, tok } = setup();
-  const slot = createSlot(db, tok.teacherA, NOW, iso(NOW + 24 * H));
+  const slot = createSlot(db, tok.teacherA, NOW, iso(NOW + 24 * H), 50, 'adult');
   enrollMe(db, tok.adultC, NOW, slot, ids.adultC);
   refused(() => enrollMe(db, tok.adultC, NOW, slot, ids.adultC));
   refused(() => enrollMe(db, tok.owner, NOW, slot, ids.adultC));
@@ -165,10 +165,10 @@ test('(е3) прошлое: слот и запись в прошедшее вр�
   // урок, который уже начался (время ушло вперёд)
   const later = NOW + 24 * H;
   const t1 = login(db, 'adultC', PW, later);
-  const slot = createSlot(db, login(db, 'teacherA', PW, NOW), NOW, iso(NOW + 2 * H));
+  const slot = createSlot(db, login(db, 'teacherA', PW, NOW), NOW, iso(NOW + 2 * H), 50, 'adult');
   refused(() => enrollMe(db, t1, later, slot, ids.adultC));
   // отменять прошедший урок тоже нельзя
-  const slot2 = createSlot(db, tok.teacherB, NOW, iso(NOW + 3 * H));
+  const slot2 = createSlot(db, tok.teacherB, NOW, iso(NOW + 3 * H), 50, 'adult');
   enrollMe(db, tok.adultC, NOW, slot2, ids.adultC);
   const t2 = login(db, 'adultC', PW, NOW + 4 * H);
   refused(() => cancelMine(db, t2, NOW + 4 * H, slot2, ids.adultC));
@@ -206,7 +206,7 @@ test('(е4) согласие и возраст 16: ребёнок без сог�
 
 test('журнал: каждое действие расписания (успех и отказ) пишется', () => {
   const { db, ids, tok } = setup();
-  const slot = createSlot(db, tok.teacherA, NOW, iso(NOW + 24 * H));
+  const slot = createSlot(db, tok.teacherA, NOW, iso(NOW + 24 * H), 50, 'adult');
   try { createSlot(db, tok.teacherA, NOW, iso(NOW + 24 * H)); } catch { /* ожидаемо */ }
   enrollMe(db, tok.adultC, NOW, slot, ids.adultC);
   try { enrollMe(db, tok.adultC, NOW, slot, ids.adultC); } catch { /* ожидаемо */ }
