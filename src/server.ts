@@ -31,7 +31,40 @@ export type ServerOptions = {
   trustedProxies?: readonly string[];   // Ф17: адреса прокси (TRUSTED_PROXY), от которых верим X-Forwarded-For
   loginDelayStepMs?: number;            // Ф17: шаг нарастающей задержки входа (тесты ставят 1)
   loginDelayMaxMs?: number;             // Ф17: потолок задержки (по умолчанию 5 с)
+  rateLimit?: RateLimitOptions | false; // Ф19a: лимит частоты изменяющих запросов (false — выключен, только для проверки/отладки)
 };
+
+// ---------- Ф19a: лимит частоты изменяющих маршрутов (POST/PUT/PATCH/DELETE), в памяти ----------
+// Два независимых ключа: пользователь (id из сессии) и адрес (clientIp: X-Forwarded-For только от TRUSTED_PROXY).
+// Окна фиксированные; у каждого ключа несколько окон (короткое и длинное). Превышение → 429 rate_limited + Retry-After.
+// Вход (/api/login) сюда не входит: у него своя нарастающая задержка и лимит пары логин+адрес.
+export type RateWindow = { windowMs: number; max: number };
+export type RateLimitOptions = { user?: readonly RateWindow[]; ip?: readonly RateWindow[] };
+export const DEFAULT_RATE_USER: readonly RateWindow[] = [{ windowMs: 60_000, max: 30 }, { windowMs: 3_600_000, max: 300 }];
+// адрес щедрее: за одним NAT (школа, общежитие) сидят многие
+export const DEFAULT_RATE_IP: readonly RateWindow[] = [{ windowMs: 60_000, max: 120 }, { windowMs: 3_600_000, max: 1200 }];
+const RATE_MAX_KEYS = 20_000;
+
+export function createRateLimiter(wins: readonly RateWindow[]) {
+  const hits = new Map<string, { start: number; n: number }[]>();
+  const longest = Math.max(...wins.map(w => w.windowMs));
+  return {
+    /** Считает запрос; возвращает 0 если можно, иначе секунд до сброса (≥1). Отказанный запрос окна не продлевает. */
+    hit(key: string, now: number): number {
+      if (hits.size >= RATE_MAX_KEYS) for (const [k, v] of hits) if (v.every(c => now - c.start >= longest)) hits.delete(k);
+      let cs = hits.get(key);
+      if (!cs) { cs = wins.map(() => ({ start: now, n: 0 })); hits.set(key, cs); }
+      let retry = 0;
+      wins.forEach((w, i) => {
+        const c = cs![i];
+        if (now - c.start >= w.windowMs || now < c.start) { c.start = now; c.n = 0; }
+        if (c.n >= w.max) retry = Math.max(retry, Math.ceil((c.start + w.windowMs - now) / 1000) || 1);
+      });
+      if (retry === 0) cs.forEach(c => { c.n++; });
+      return retry;
+    },
+  };
+}
 
 // ---------- сериализаторы: белый список полей, отдельный на роль ----------
 type Json = Record<string, unknown>;
@@ -59,8 +92,8 @@ function serializePost(role: Role, p: Post & { role?: string }): Json {
 
 // ---------- ошибки ----------
 class HttpError extends Error {
-  status: number; code: string; extra: Json;
-  constructor(status: number, code: string, extra: Json = {}) { super(code); this.name = 'HttpError'; this.status = status; this.code = code; this.extra = extra; }
+  status: number; code: string; extra: Json; headers: Record<string, string>;
+  constructor(status: number, code: string, extra: Json = {}, headers: Record<string, string> = {}) { super(code); this.name = 'HttpError'; this.status = status; this.code = code; this.extra = extra; this.headers = headers; }
 }
 
 // ---------- маршруты ----------
@@ -273,6 +306,11 @@ export function createApp(db: DatabaseSync, opts: ServerOptions = {}): Server {
   const cookieAttrs = `Path=/; HttpOnly; SameSite=Strict${opts.secureCookie ? '; Secure' : ''}`;
   const cookieName = cookieNameFor(!!opts.secureCookie);   // Ф18: за HTTPS — __Host-sid (браузер не примет с чужого поддомена/пути)
 
+  const limiters = opts.rateLimit === false ? null : {
+    user: createRateLimiter(opts.rateLimit?.user ?? DEFAULT_RATE_USER),
+    ip: createRateLimiter(opts.rateLimit?.ip ?? DEFAULT_RATE_IP),
+  };
+
   async function handle(req: IncomingMessage, res: ServerResponse) {
     const url = new URL(req.url ?? '/', 'http://localhost');
     const path = url.pathname;
@@ -296,6 +334,13 @@ export function createApp(db: DatabaseSync, opts: ServerOptions = {}): Server {
       body = await readBody(req, maxBody);
     };
     const mutating = method !== 'GET' && method !== 'HEAD';
+
+    // Ф19a: лимит частоты изменяющих запросов — после проверки сессии (чужие 401 чужой счётчик не трогают), до разбора тела
+    if (mutating && !isLogin && limiters) {
+      const ip = clientIp(req, opts.trustedProxies ?? []);
+      const wait = Math.max(limiters.user.hit(`u:${actor!.id}`, now), limiters.ip.hit(`i:${ip}`, now));
+      if (wait > 0) throw new HttpError(429, 'rate_limited', {}, { 'Retry-After': String(wait) });
+    }
 
     if (isLogin) {
       await readJson();
@@ -343,7 +388,7 @@ export function createApp(db: DatabaseSync, opts: ServerOptions = {}): Server {
         const k = `error.${String(body.error)}`;
         return send(res, status, wantL10n && hasKey(k) ? { ...body, message_localized: t(lang, k), lang } : body, extra);
       };
-      if (e instanceof HttpError) return sendL(e.status, { error: e.code, ...e.extra }, e.status === 413 ? close : {});
+      if (e instanceof HttpError) return sendL(e.status, { error: e.code, ...e.extra }, { ...(e.status === 413 ? close : {}), ...e.headers });
       if (e instanceof MessageRejected) return sendL(422, { error: 'message_rejected', reason: e.reason, message: e.message });
       if (e instanceof Denied) return sendL(403, { error: 'forbidden' });       // внутреннее имя права наружу не отдаём
       if (e instanceof RoomRefused) return sendL(409, { error: e.reason });

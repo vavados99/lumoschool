@@ -8,6 +8,7 @@
   "error.forbidden": "Nie masz do tego dostępu.",
   "error.invalid_credentials": "Nieprawidłowy login lub hasło.",
   "error.too_many_attempts": "Zbyt wiele prób. Spróbuj ponownie później.",
+  "error.rate_limited": "Zbyt wiele żądań. Zwolnij i spróbuj ponownie za chwilę.",
   "error.not_available": "To jest niedostępne.",
   "error.conflict": "To koliduje z aktualnym harmonogramem.",
   "error.internal_error": "Po naszej stronie wystąpił błąd. Spróbuj ponownie później.",

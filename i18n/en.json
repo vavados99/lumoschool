@@ -8,6 +8,7 @@
   "error.forbidden": "You do not have access to this.",
   "error.invalid_credentials": "Wrong login or password.",
   "error.too_many_attempts": "Too many attempts. Try again later.",
+  "error.rate_limited": "Too many requests. Please slow down and try again shortly.",
   "error.not_available": "This is not available.",
   "error.conflict": "This conflicts with the current schedule.",
   "error.internal_error": "Something went wrong on our side. Please try again later.",
