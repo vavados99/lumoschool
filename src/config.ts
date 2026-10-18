@@ -14,6 +14,10 @@ export type Config = {
   readonly trustedProxies: readonly string[];       // Ф17: TRUSTED_PROXY — адреса прокси через запятую; пусто = X-Forwarded-For не читаем
   readonly messageRetentionDays: number | null;      // null → значение по умолчанию из consent.ts
   readonly loginAttemptRetentionDays: number | null;
+  readonly schedulerEnabled: boolean;                // Ф19c: SCHEDULER=off выключает встроенный планировщик (по умолчанию включён)
+  readonly outboxIntervalMs: number;                 // SCHEDULER_OUTBOX_MS
+  readonly backupIntervalMs: number;                 // SCHEDULER_BACKUP_MS
+  readonly cleanupIntervalMs: number;                // SCHEDULER_CLEANUP_MS
   readonly sessionSecret: string;                    // не перечисляется, в JSON/логах скрыт
 };
 
@@ -69,6 +73,13 @@ export function loadConfig(env: Env = process.env, opts: LoadOptions = {}): Conf
   const messageRetentionDays = intVar(env, 'RETENTION_MESSAGE_DAYS', 0, 36500, null);
   const loginAttemptRetentionDays = intVar(env, 'RETENTION_LOGIN_ATTEMPT_DAYS', 0, 36500, null);
 
+  const sch = get(env, 'SCHEDULER');
+  if (sch !== undefined && sch !== 'on' && sch !== 'off') throw new ConfigError('SCHEDULER must be on or off');
+  // интервалы: целое число миллисекунд; значения ниже нижней границы поднимает сам планировщик (scheduler.ts, MIN_INTERVAL_MS)
+  const outboxIntervalMs = intVar(env, 'SCHEDULER_OUTBOX_MS', 1, 604_800_000, 60_000)!;
+  const backupIntervalMs = intVar(env, 'SCHEDULER_BACKUP_MS', 1, 604_800_000, 86_400_000)!;
+  const cleanupIntervalMs = intVar(env, 'SCHEDULER_CLEANUP_MS', 1, 604_800_000, 3_600_000)!;
+
   let sessionSecret = '';
   if (opts.secret !== false) {
     const s = get(env, 'SESSION_SECRET');
@@ -82,7 +93,7 @@ export function loadConfig(env: Env = process.env, opts: LoadOptions = {}): Conf
     }
   }
 
-  const cfg = { mode, port, databasePath, backupDir, backupKeep, cookieSecure, trustedProxies, messageRetentionDays, loginAttemptRetentionDays } as Config;
+  const cfg = { mode, port, databasePath, backupDir, backupKeep, cookieSecure, trustedProxies, messageRetentionDays, loginAttemptRetentionDays, schedulerEnabled: sch !== 'off', outboxIntervalMs, backupIntervalMs, cleanupIntervalMs } as Config;
   // секрет — не перечисляемое поле: не попадёт в JSON.stringify, console.log, Object.keys
   Object.defineProperty(cfg, 'sessionSecret', { value: sessionSecret, enumerable: false });
   Object.defineProperty(cfg, 'toString', { value: () => `[Config mode=${mode}]`, enumerable: false });

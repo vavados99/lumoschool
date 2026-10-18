@@ -424,4 +424,11 @@ if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).
   const db = openDb(cfg.databasePath);
   const port = await listen(createApp(db, { secureCookie: cfg.cookieSecure, trustedProxies: cfg.trustedProxies }), cfg.port);
   console.log(`listening on 127.0.0.1:${port} (mode ${cfg.mode})`);
+  // Ф19c: планировщик только в реальном сервере (не в тестах/seed), выключается SCHEDULER=off.
+  // Реальной отправки нет: вне prod уведомления идут в консольный сток; в prod без настоящего канала очередь не трогаем (останется ждать).
+  const { startScheduler } = await import('./scheduler.ts');
+  const { ConsoleSink } = await import('./notify.ts');
+  const sched = startScheduler(db, cfg, cfg.mode === 'prod' ? null : new ConsoleSink());
+  const shutdown = () => { sched?.stop(); process.exit(0); };
+  process.once('SIGINT', shutdown); process.once('SIGTERM', shutdown);
 }
