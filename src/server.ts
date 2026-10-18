@@ -326,8 +326,8 @@ export function createApp(db: DatabaseSync, opts: ServerOptions = {}): Server {
   return server;
 }
 
-/** Запуск: только 127.0.0.1, порт из PORT. */
-export function listen(server: Server, port = Number(process.env.PORT ?? 8787)): Promise<number> {
+/** Запуск: только 127.0.0.1. Порт — из конфигурации (PORT). */
+export function listen(server: Server, port = 8787): Promise<number> {
   return new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(port, '127.0.0.1', () => resolve((server.address() as { port: number }).port));
@@ -336,7 +336,13 @@ export function listen(server: Server, port = Number(process.env.PORT ?? 8787)):
 
 if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
   const { openDb } = await import('./db.ts');
-  const db = openDb(process.env.DATABASE_PATH ?? ':memory:');
-  const port = await listen(createApp(db, { secureCookie: process.env.COOKIE_SECURE === '1' }));
-  console.log(`listening on 127.0.0.1:${port}`);
+  const { loadConfig, ConfigError } = await import('./config.ts');
+  const { setSessionSecret } = await import('./auth.ts');
+  let cfg;
+  try { cfg = loadConfig(); }
+  catch (e) { console.error(`config error: ${e instanceof ConfigError ? e.message : 'invalid configuration'}`); process.exit(1); }
+  setSessionSecret(cfg.sessionSecret);
+  const db = openDb(cfg.databasePath);
+  const port = await listen(createApp(db, { secureCookie: cfg.cookieSecure }), cfg.port);
+  console.log(`listening on 127.0.0.1:${port} (mode ${cfg.mode})`);
 }

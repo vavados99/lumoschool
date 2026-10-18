@@ -16,7 +16,7 @@ test('seed в файл → openDb → сервер отвечает → повт
   const dir = mkdtempSync(join(tmpdir(), 'lumo-db-'));
   const file = join(dir, 'demo.sqlite');
   try {
-    const r = spawnSync(process.execPath, ['src/seed.ts'], { env: { ...process.env, DATABASE_PATH: file }, encoding: 'utf8' });
+    const r = spawnSync(process.execPath, ['src/seed.ts'], { env: { ...process.env, DATABASE_PATH: file, LUMO_MODE: 'dev' }, encoding: 'utf8' });
     assert.equal(r.status, 0, r.stderr);
     const m = /owner \[([^\]]+)\]/.exec(r.stdout);
     assert.ok(m, 'сид напечатал логин владельца');

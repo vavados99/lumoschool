@@ -13,8 +13,8 @@ export const SCHEMA_VERSION = MIGRATIONS.length;
 
 const version = (db: DatabaseSync) => Number((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version);
 
-/** Путь к базе — из окружения (DATABASE_PATH); ':memory:' для тестов. */
-export function openDb(path: string = process.env.DATABASE_PATH ?? ':memory:'): DatabaseSync {
+/** Путь к базе передаёт вызывающий (из config.ts); ':memory:' для тестов. */
+export function openDb(path: string = ':memory:'): DatabaseSync {
   const db = new DatabaseSync(path);
   db.exec('PRAGMA busy_timeout = 10000');
   db.exec('PRAGMA foreign_keys = ON');

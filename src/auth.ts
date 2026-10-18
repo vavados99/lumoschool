@@ -1,6 +1,6 @@
 // Вход и сессии. Роль берётся из БАЗЫ по сессии (currentUser), не от клиента.
 import type { DatabaseSync } from 'node:sqlite';
-import { randomBytes, scryptSync, timingSafeEqual, createHash } from 'node:crypto';
+import { randomBytes, scryptSync, timingSafeEqual, createHash, createHmac } from 'node:crypto';
 import { type Actor, type Role } from './access.ts';
 
 export const MIN_PASSWORD = 10;
@@ -40,7 +40,10 @@ export function verifyPassword(pw: string, stored: string): boolean {
   const got = scryptSync(pw, salt, want.length, { N: n, r, p });
   return got.length === want.length && timingSafeEqual(got, want);
 }
-const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
+let sessionSecret: string | null = null;
+/** Ф12: серверный секрет (SESSION_SECRET). Задан — хеш токена в базе считается HMAC-SHA256 с ним: украденная копия базы не даёт проверять токены. Смена секрета разлогинивает всех. */
+export function setSessionSecret(s: string | null) { sessionSecret = s; }
+const sha256 = (s: string) => (sessionSecret ? createHmac('sha256', sessionSecret) : createHash('sha256')).update(s).digest('hex');
 
 function audit(db: DatabaseSync, actorId: number | null, action: string, outcome: 'allowed' | 'denied') {
   // без логина, паролей и токенов

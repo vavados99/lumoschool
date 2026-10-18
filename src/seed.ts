@@ -3,6 +3,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { register } from './auth.ts';
 import { openDb } from './db.ts';
+import { assertSeedAllowed, ConfigError } from './config.ts';
 
 export type DemoUser = { id: number; login: string; password: string; email: string; phone: string; display_name: string };
 export type Demo = { users: Record<string, DemoUser>; lessons: Record<string, number>; surnames: string[] };
@@ -11,6 +12,7 @@ export type Demo = { users: Record<string, DemoUser>; lessons: Record<string, nu
 export const DEMO_SURNAMES = ['Nobodyson', 'Testerova', 'Fakeman'];
 
 export function seedDemo(db: DatabaseSync, now = Date.now()): Demo {
+  assertSeedAllowed(process.env.LUMO_MODE === undefined ? { LUMO_MODE: 'test' } : process.env);   // явный prod — отказ
   const users: Record<string, DemoUser> = {};
   let n = 0;
   const mk = (key: string, role: string, name: string, birth: string | null): DemoUser => {
@@ -65,6 +67,7 @@ export function seedDemo(db: DatabaseSync, now = Date.now()): Demo {
 }
 
 if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+  try { assertSeedAllowed(); } catch (e) { console.error(`seed refused: ${(e as ConfigError).message}`); process.exit(1); }
   const path = process.env.DATABASE_PATH;
   if (!path || path === ':memory:') { console.error('Set DATABASE_PATH to a file (demo only, fictional data).'); process.exit(1); }
   const db = openDb(path);

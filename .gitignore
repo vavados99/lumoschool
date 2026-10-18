@@ -15,3 +15,5 @@ backups/
 *.bak
 lumo-backup-*
 *.pre-restore-*
+*.log
+*.sqlite-*

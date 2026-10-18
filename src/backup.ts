@@ -57,10 +57,12 @@ export function rotate(dir: string, keep: number): string[] {
 }
 
 if (process.argv[1] && import.meta.url === new URL(`file://${resolve(process.argv[1])}`).href) {
-  const path = process.env.DATABASE_PATH, dir = process.env.BACKUP_DIR;
+  const { loadConfig } = await import('./config.ts');
+  let c; try { c = loadConfig(process.env, { secret: false }); } catch (e) { console.error(`config error: ${(e as Error).message}`); process.exit(1); }
+  const path = c.databasePath, dir = c.backupDir;
   if (!path || path === ':memory:' || !dir) { console.error('Set DATABASE_PATH (file) and BACKUP_DIR.'); process.exit(1); }
   try {
-    const r = backupDb(path, dir, process.env.BACKUP_KEEP ? { keep: Number(process.env.BACKUP_KEEP) } : {});
+    const r = backupDb(path, dir, { keep: c.backupKeep });
     console.log(`backup ok: ${r.file}`);
     if (r.rotated.length) console.log(`rotated out: ${r.rotated.length}`);
   } catch (e) { console.error(`backup FAILED: ${(e as Error).message}`); process.exit(1); }
