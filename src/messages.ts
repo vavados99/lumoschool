@@ -75,7 +75,8 @@ type Thread = { id: number; teacher_id: number; student_id: number };
 export function notifyParents(db: DatabaseSync, childId: number, kind: 'thread_message' | 'room_message', refId: number) {
   if (!isChild(db, childId)) return;
   const ins = db.prepare('INSERT INTO parent_notifications(parent_id, child_id, kind, ref_id) VALUES (?,?,?,?)');
-  for (const p of parentsOf(db, childId)) ins.run(p, childId, kind, refId);
+  const out = db.prepare('INSERT INTO notification_outbox(notification_id) VALUES (?)');   // Ф19b: в очередь доставки
+  for (const p of parentsOf(db, childId)) out.run(Number(ins.run(p, childId, kind, refId).lastInsertRowid));
 }
 
 /** Ф18: уведомления родителя о репликах преподавателя его ребёнку (только свои; без текста). Каждое чтение в журнале — через guard. */

@@ -50,5 +50,8 @@
   "lesson.duration": {
     "one": "{count} Minute",
     "other": "{count} Minuten"
-  }
+  },
+  "notify.subject": "Neue Nachricht in Ihrem Konto",
+  "notify.thread_message": "Es gibt eine neue Nachricht einer Lehrkraft an Ihr Kind. Bitte melden Sie sich in Ihrem Konto an, um sie zu lesen.",
+  "notify.room_message": "Im Unterrichts-Chat Ihres Kindes gibt es eine neue Nachricht. Bitte melden Sie sich in Ihrem Konto an, um sie zu sehen."
 }

@@ -56,5 +56,8 @@
     "few": "{count} minuty",
     "many": "{count} minuty",
     "other": "{count} minut"
-  }
+  },
+  "notify.subject": "Nová zpráva ve vašem účtu",
+  "notify.thread_message": "Pro vaše dítě je nová zpráva od učitele. Přihlaste se prosím do účtu a přečtěte si ji.",
+  "notify.room_message": "V chatu lekce vašeho dítěte je nová zpráva. Přihlaste se prosím do účtu a podívejte se na ni."
 }

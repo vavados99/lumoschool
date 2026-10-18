@@ -56,5 +56,8 @@
     "few": "{count} minuty",
     "many": "{count} minut",
     "other": "{count} minuty"
-  }
+  },
+  "notify.subject": "Nowa wiadomość w Twoim koncie",
+  "notify.thread_message": "Jest nowa wiadomość od nauczyciela dla Twojego dziecka. Zaloguj się do konta, aby ją zobaczyć.",
+  "notify.room_message": "W czacie lekcji Twojego dziecka jest nowa wiadomość. Zaloguj się do konta, aby ją zobaczyć."
 }
