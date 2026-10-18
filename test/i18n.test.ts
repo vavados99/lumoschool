@@ -134,3 +134,37 @@ test('сервер: ошибка получает message_localized по ?lang /
   } finally { srv.close(); srv.closeAllConnections(); }
 });
 
+
+// Хвост Ф13: сторож выше не видит динамический ключ `error.${код}` (server.ts). Собираем реальные коды ошибок API из src/
+// и требуем error.<код> во всех 6 каталогах. Источники кодов: new HttpError(статус, 'код'), new RoomRefused('код'),
+// литералы { error: 'код' } и error: e.reason у RoomRefused (покрыт сбором RoomRefused).
+function apiErrorCodes(): Map<string, string> {
+  const dir = new URL('../src/', import.meta.url);
+  const found = new Map<string, string>();   // код → файл, где найден
+  const add = (code: string, file: string) => { if (!found.has(code)) found.set(code, file); };
+  for (const f of readdirSync(dir).filter(x => x.endsWith('.ts'))) {
+    const src = readFileSync(new URL(f, dir), 'utf8');
+    for (const m of src.matchAll(/new HttpError\(\s*\d+\s*,\s*(['"])([a-z_]+)\1/g)) add(m[2], f);
+    // тернарий кода: new HttpError(… ? 429 : 401, … ? 'a' : 'b')
+    for (const m of src.matchAll(/new HttpError\([^;\n]*?\?\s*\d+\s*:\s*\d+\s*,[^;\n]*?\?\s*(['"])([a-z_]+)\1\s*:\s*(['"])([a-z_]+)\3/g)) { add(m[2], f); add(m[4], f); }
+    for (const m of src.matchAll(/new RoomRefused\(\s*(['"])([a-z_]+)\1/g)) add(m[2], f);
+    for (const m of src.matchAll(/\berror:\s*(['"])([a-z_]+)\1/g)) add(m[2], f);
+  }
+  return found;
+}
+
+test('каждый реальный код ошибки API имеет ключ error.<код> во всех 6 каталогах', () => {
+  const codes = apiErrorCodes();
+  // нижняя граница: сторож не должен молча «ничего не найти» (17 кодов на момент Ф13)
+  assert.ok(codes.size >= 17, `найдено кодов ${codes.size}: ${[...codes.keys()].join(', ')}`);
+  for (const must of ['unauthorized', 'forbidden', 'not_found', 'invalid_credentials', 'too_many_attempts', 'room_closed', 'recording_consent_missing', 'internal_error'])
+    assert.ok(codes.has(must), `сборщик не нашёл код ${must}`);
+  for (const [code, file] of codes) for (const l of LANGS)
+    assert.ok(Object.hasOwn(catalog(l), `error.${code}`), `${file}: для кода «${code}» нет ключа error.${code} в ${l}`);
+});
+
+test('в каталогах нет «осиротевших» error.* без кода в src/ (опечатка в ключе не прячется)', () => {
+  const codes = apiErrorCodes();
+  for (const k of Object.keys(catalog(FALLBACK)).filter(x => x.startsWith('error.')))
+    assert.ok(codes.has(k.slice(6)), `ключ ${k} не соответствует ни одному коду в src/`);
+});
