@@ -1,0 +1,50 @@
+{
+  "error.bad_request": "Ungültige Anfrage.",
+  "error.bad_json": "Der Anfragetext ist kein gültiges JSON.",
+  "error.payload_too_large": "Die Anfrage ist zu groß.",
+  "error.unsupported_media_type": "Nicht unterstützter Inhaltstyp. Bitte JSON senden.",
+  "error.not_found": "Nicht gefunden.",
+  "error.unauthorized": "Bitte melde dich an.",
+  "error.forbidden": "Dafür hast du keine Berechtigung.",
+  "error.invalid_credentials": "Falscher Benutzername oder falsches Passwort.",
+  "error.too_many_attempts": "Zu viele Versuche. Bitte versuche es später erneut.",
+  "error.conflict": "Das passt nicht zum aktuellen Stundenplan.",
+  "error.internal_error": "Auf unserer Seite ist ein Fehler aufgetreten. Bitte versuche es später erneut.",
+  "error.message_rejected": "Die Nachricht wurde nicht gesendet, weil sie gegen die Chatregeln verstößt.",
+  "error.room_closed": "Der Unterrichtsraum ist geschlossen.",
+  "error.wait_for_adult": "Bitte warte, bis ein Erwachsener der Stunde beitritt.",
+  "error.child_would_be_alone": "Ein Kind darf nicht allein im Raum bleiben.",
+  "error.observer_read_only": "Du bist Beobachter und kannst im Chat nicht schreiben.",
+  "error.recording_consent_missing": "Aufnahme nicht möglich: Die erforderliche Einwilligung liegt nicht vor.",
+  "role.student": "Schüler",
+  "role.parent": "Elternteil",
+  "role.teacher": "Lehrkraft",
+  "role.owner": "Inhaber",
+  "lesson.status.planned": "Geplant",
+  "lesson.status.cancelled": "Abgesagt",
+  "lesson.status.done": "Abgeschlossen",
+  "enrollment.status.active": "Angemeldet",
+  "enrollment.status.cancelled": "Storniert",
+  "sos.title": "Notruf",
+  "sos.button": "Hilfe rufen",
+  "sos.confirm": "Den Inhaber der Schule zu dieser Stunde rufen?",
+  "sos.sent": "Der Inhaber wurde benachrichtigt und kommt bald dazu.",
+  "sos.failed": "Der Ruf konnte nicht gesendet werden. Versuche es erneut oder kontaktiere den Inhaber direkt.",
+  "consent.recording.title": "Einwilligung zur Unterrichtsaufnahme",
+  "consent.recording.text": "Ich bin damit einverstanden, dass diese Stunde aufgenommen wird. Ich kann meine Einwilligung jederzeit widerrufen.",
+  "consent.granted": "Einwilligung erteilt.",
+  "consent.revoked": "Einwilligung widerrufen.",
+  "greeting.hello": "Hallo, {name}!",
+  "lesson.count": {
+    "one": "{count} Stunde",
+    "other": "{count} Stunden"
+  },
+  "participants.count": {
+    "one": "{count} Teilnehmer",
+    "other": "{count} Teilnehmer"
+  },
+  "lesson.duration": {
+    "one": "{count} Minute",
+    "other": "{count} Minuten"
+  }
+}

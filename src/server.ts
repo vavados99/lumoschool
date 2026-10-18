@@ -15,6 +15,7 @@ import { cancelMine, createSlot, enrollMe, myLessons, type LessonView, type Stud
 import { MessageRejected, listThreads, openThread, postMessage, readThread, type Post } from './messages.ts';
 import { enterRoom, leaveRoom, roomState, postRoomMessage, callOwner, listOwnerCalls, setRecording, videoStub, RoomRefused } from './room.ts';
 import { ownerDashboard, readAuditPage, parsePeriod, AUDIT_DEFAULT_LIMIT } from './dashboard.ts';
+import { t, hasKey, pickLang, fromAcceptLanguage } from './i18n.ts';
 import { exportData, listConsents, revokeConsent } from './consent.ts';
 
 export const COOKIE = 'sid';
@@ -310,14 +311,24 @@ export function createApp(db: DatabaseSync, opts: ServerOptions = {}): Server {
     handle(req, res).catch(e => {
       if (res.headersSent) { res.destroy(); return; }
       const close = { Connection: 'close' };
-      if (e instanceof HttpError) return send(res, e.status, { error: e.code, ...e.extra }, e.status === 413 ? close : {});
-      if (e instanceof MessageRejected) return send(res, 422, { error: 'message_rejected', reason: e.reason, message: e.message });
-      if (e instanceof Denied) return send(res, 403, { error: 'forbidden' });       // внутреннее имя права наружу не отдаём
-      if (e instanceof RoomRefused) return send(res, 409, { error: e.reason });
-      if (e instanceof ScheduleError) return send(res, 409, { error: 'conflict', message: e.message });
-      if (e instanceof AuthError) return send(res, 401, { error: 'unauthorized' });
+      // Ф13: локализованный текст — ДОБАВОЧНОЕ поле message_localized (+lang); код ошибки, статус и прежние поля не меняются
+      // Без ?lang= и без Accept-Language тело ответа прежнее байт в байт (обратная совместимость).
+      const qLang = new URL(req.url ?? '/', 'http://localhost').searchParams.get('lang');
+      const aLang = String(req.headers['accept-language'] ?? '');
+      const wantL10n = Boolean(qLang) || fromAcceptLanguage(aLang) !== null;   // '*' (так шлёт fetch) языком не считается
+      const lang = pickLang({ query: qLang, acceptLanguage: aLang });
+      const sendL = (status: number, body: Json, extra: Record<string, string> = {}) => {
+        const k = `error.${String(body.error)}`;
+        return send(res, status, wantL10n && hasKey(k) ? { ...body, message_localized: t(lang, k), lang } : body, extra);
+      };
+      if (e instanceof HttpError) return sendL(e.status, { error: e.code, ...e.extra }, e.status === 413 ? close : {});
+      if (e instanceof MessageRejected) return sendL(422, { error: 'message_rejected', reason: e.reason, message: e.message });
+      if (e instanceof Denied) return sendL(403, { error: 'forbidden' });       // внутреннее имя права наружу не отдаём
+      if (e instanceof RoomRefused) return sendL(409, { error: e.reason });
+      if (e instanceof ScheduleError) return sendL(409, { error: 'conflict', message: e.message });
+      if (e instanceof AuthError) return sendL(401, { error: 'unauthorized' });
       console.error('internal error:', e instanceof Error ? e.name : typeof e);       // в лог — только тип, не стек и не данные
-      return send(res, 500, { error: 'internal_error' });
+      return sendL(500, { error: 'internal_error' });
     });
   });
   server.requestTimeout = 15_000;

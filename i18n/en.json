@@ -1,0 +1,50 @@
+{
+  "error.bad_request": "Invalid request.",
+  "error.bad_json": "The request body is not valid JSON.",
+  "error.payload_too_large": "The request is too large.",
+  "error.unsupported_media_type": "Unsupported content type. Send JSON.",
+  "error.not_found": "Not found.",
+  "error.unauthorized": "Please sign in.",
+  "error.forbidden": "You do not have access to this.",
+  "error.invalid_credentials": "Wrong login or password.",
+  "error.too_many_attempts": "Too many attempts. Try again later.",
+  "error.conflict": "This conflicts with the current schedule.",
+  "error.internal_error": "Something went wrong on our side. Please try again later.",
+  "error.message_rejected": "The message was not sent because it breaks the chat rules.",
+  "error.room_closed": "The lesson room is closed.",
+  "error.wait_for_adult": "Please wait for an adult to join the lesson.",
+  "error.child_would_be_alone": "A child cannot stay in the room alone.",
+  "error.observer_read_only": "You are an observer and cannot write in the chat.",
+  "error.recording_consent_missing": "Recording is not possible: the required consent has not been given.",
+  "role.student": "Student",
+  "role.parent": "Parent",
+  "role.teacher": "Teacher",
+  "role.owner": "Owner",
+  "lesson.status.planned": "Planned",
+  "lesson.status.cancelled": "Cancelled",
+  "lesson.status.done": "Completed",
+  "enrollment.status.active": "Enrolled",
+  "enrollment.status.cancelled": "Cancelled",
+  "sos.title": "Emergency call",
+  "sos.button": "Call for help",
+  "sos.confirm": "Call the owner of the school to this lesson?",
+  "sos.sent": "The owner has been notified and will join soon.",
+  "sos.failed": "Could not send the call. Please try again or contact the owner directly.",
+  "consent.recording.title": "Consent to lesson recording",
+  "consent.recording.text": "I agree that this lesson may be recorded. I can withdraw my consent at any time.",
+  "consent.granted": "Consent given.",
+  "consent.revoked": "Consent withdrawn.",
+  "greeting.hello": "Hello, {name}!",
+  "lesson.count": {
+    "one": "{count} lesson",
+    "other": "{count} lessons"
+  },
+  "participants.count": {
+    "one": "{count} participant",
+    "other": "{count} participants"
+  },
+  "lesson.duration": {
+    "one": "{count} minute",
+    "other": "{count} minutes"
+  }
+}
