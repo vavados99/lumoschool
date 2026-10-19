@@ -32,6 +32,7 @@ export type ServerOptions = {
   loginDelayStepMs?: number;            // Ф17: шаг нарастающей задержки входа (тесты ставят 1)
   loginDelayMaxMs?: number;             // Ф17: потолок задержки (по умолчанию 5 с)
   schedulerHealth?: () => unknown;      // Ф21: источник «живости» планировщика для GET /api/owner/scheduler (только владелец)
+  eraser?: typeof eraseData;            // Ф26: подмена ядра стирания — ТОЛЬКО для теста слоя «маршрут» (по умолчанию eraseData)
   rateLimit?: RateLimitOptions | false; // Ф19a: лимит частоты изменяющих запросов (false — выключен, только для проверки/отладки)
 };
 
@@ -112,7 +113,7 @@ const str = (v: unknown, what: string, max = 2100): string => {
   return v;
 };
 
-function buildRoutes(schedulerHealth?: () => unknown): Route[] {
+function buildRoutes(schedulerHealth?: () => unknown, eraser: typeof eraseData = eraseData): Route[] {
   const R: Route[] = [];
   const add = (method: string, path: string, roles: readonly Role[], run: Route['run']) =>
     R.push({ method, path, re: new RegExp('^' + path.replace(/:id/g, '(\\d{1,12})') + '$'), roles, run });
@@ -194,7 +195,7 @@ function buildRoutes(schedulerHealth?: () => unknown): Route[] {
   // ученик 16+ просит владельца (ограничение, см. docs). Чужой ребёнок / владелец / преподаватель / уже удалённый → 403 из ядра (consent.eraseData).
   add('POST', '/api/erase/:id', ['owner', 'parent'], ({ db, actor, now, params, body }) => {
     if (body.confirm !== true) throw new HttpError(400, 'bad_request', { field: 'confirm' });
-    eraseData(db, actor, int(params[0], 'id'), now);
+    eraser(db, actor, int(params[0], 'id'), now);
     return { body: { ok: true } };
   });
   add('GET', '/api/export/:id', ['student', 'parent', 'owner'], ({ db, actor, now, params }) => {
@@ -316,7 +317,7 @@ export function clientIp(req: IncomingMessage, trusted: readonly string[]): stri
 export function createApp(db: DatabaseSync, opts: ServerOptions = {}): Server {
   const maxBody = opts.maxBody ?? DEFAULT_MAX_BODY;
   const clock = opts.now ?? Date.now;
-  const routes = buildRoutes(opts.schedulerHealth);
+  const routes = buildRoutes(opts.schedulerHealth, opts.eraser);
   const cookieAttrs = `Path=/; HttpOnly; SameSite=Strict${opts.secureCookie ? '; Secure' : ''}`;
   const cookieName = cookieNameFor(!!opts.secureCookie);   // Ф18: за HTTPS — __Host-sid (браузер не примет с чужого поддомена/пути)
 

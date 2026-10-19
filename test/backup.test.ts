@@ -135,7 +135,12 @@ test('в2) восстановление поверх существующей б
     assert.ok(r.safetyCopy && existsSync(r.safetyCopy));
     assert.ok(readFileSync(r.safetyCopy!).equals(damaged), 'страховка = прежние байты');
     assert.equal(mode(r.safetyCopy!), 0o600);
-    assert.deepEqual(fingerprint(file), before);
+    // Ф26: рабочая база нечитаема → «надгробия» не получить: громкое предупреждение + одна строка в журнале; остальное как в копии
+    assert.equal(r.warnings.length, 1); assert.match(r.warnings[0], /could NOT be re-erased/);
+    const after = fingerprint(file);
+    assert.equal(after.audit_log.split(':')[0], String(Number(before.audit_log.split(':')[0]) + 1));
+    assert.equal(openDb(file).prepare(`SELECT COUNT(*) c FROM audit_log WHERE action = 'restore.tombstones_unreadable'`).get()!.c, 1);
+    for (const k of Object.keys(before)) if (k !== 'audit_log') assert.equal(after[k], before[k], k);
     assert.throws(() => restoreDb(file, file), /same file/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

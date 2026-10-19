@@ -163,6 +163,18 @@ export function eraseData(db: DatabaseSync, a: Actor, subjectId: number, now = D
       audit(db, a, 'data.erase.refused', 'person_data', subjectId, 'denied');
       throw new Denied('this person cannot be erased here');
     }
+    applyErasure(db, a, subjectId, u.role, now, legalDays);
+    // Ф26: «надгробие» — только id и время, без персональных данных. Нужно, чтобы восстановление из старой копии
+    // (где человек ещё не стёрт) повторно обезличило его (restore.ts → reapplyErasures).
+    db.prepare('INSERT OR REPLACE INTO erased_subjects(user_id, erased_at) VALUES (?, ?)').run(subjectId, iso(now));
+    audit(db, a, 'data.erased', 'person_data', subjectId, 'allowed');
+  });
+}
+
+/** Ф26: сам механизм стирания без проверки прав (права — в eraseData). Актор null — стирание при восстановлении копии. */
+function applyErasure(db: DatabaseSync, a: Actor | null, subjectId: number, role: string, now: number, legalDays: number): void {
+  const u = { role };
+  {
     const keepUntil = iso(now + legalDays * DAY);
     cancelFutureEnrollments(db, a, subjectId, now);
     // сообщения: у ученика — все тела в его ветках (включая реплики преподавателя и родителей — ветка умирает), у родителя — его реплики
@@ -182,7 +194,7 @@ export function eraseData(db: DatabaseSync, a: Actor, subjectId: number, now = D
     db.prepare('DELETE FROM contact_vault WHERE user_id = ?').run(subjectId);
     // согласия: отзываем и храним как доказательство (срок), где человек — ребёнок или давший родитель
     db.prepare(`UPDATE parental_consents SET revoked_at = COALESCE(revoked_at, ?), revoked_by = COALESCE(revoked_by, ?), retain_until = COALESCE(retain_until, ?)
-      WHERE child_id = ? OR parent_id = ?`).run(iso(now), a.id, keepUntil, subjectId, subjectId);
+      WHERE child_id = ? OR parent_id = ?`).run(iso(now), a?.id ?? null, keepUntil, subjectId, subjectId);
     if (u.role === 'parent') {   // у детей этого родителя пропало согласие — их будущие записи снимаются тоже
       for (const c of db.prepare('SELECT child_id FROM parent_child WHERE parent_id = ?').all(subjectId) as { child_id: number }[])
         if (!hasActiveConsentAny(db, c.child_id)) cancelFutureEnrollments(db, a, c.child_id, now);
@@ -198,9 +210,27 @@ export function eraseData(db: DatabaseSync, a: Actor, subjectId: number, now = D
     db.prepare('UPDATE audit_log SET actor_id = ? WHERE actor_id = ?').run(ERASED_ID, subjectId);
     db.prepare(`UPDATE audit_log SET target_id = ? WHERE target_id = ? AND target_type IN (${PERSON_TARGET_TYPES.map(() => '?').join(',')})`)
       .run(ERASED_ID, subjectId, ...PERSON_TARGET_TYPES);
-    audit(db, a, 'data.erased', 'person_data', subjectId, 'allowed');
+  }
+}
+
+/** Ф26: повторное стирание при восстановлении из копии. Вызывается restore.ts на уже подготовленном файле (до подмены рабочей базы).
+ *  Для каждого «надгробия» (erased_subjects): если в копии такой человек есть и не обезличен — стираем тем же механизмом, что и eraseData.
+ *  Человек, созданный ПОСЛЕ времени стирания (повторное использование id), не трогается. Возвращает id повторно стёртых. */
+export function reapplyErasures(db: DatabaseSync, now = Date.now(), legalDays = LEGAL_RETENTION_DAYS): number[] {
+  return inTx(db, () => {
+    const done: number[] = [];
+    const rows = db.prepare(`SELECT e.user_id AS id, u.role AS role FROM erased_subjects e JOIN users u ON u.id = e.user_id
+      WHERE u.anonymized_at IS NULL AND u.created_at <= datetime(e.erased_at) ORDER BY e.user_id`).all() as { id: number; role: string }[];
+    for (const r of rows) {
+      if (r.role !== 'student' && r.role !== 'parent') { audit(db, null, 'data.reerase.refused', 'person_data', r.id, 'denied'); continue; }
+      applyErasure(db, null, r.id, r.role, now, legalDays);
+      audit(db, null, 'data.reerased_after_restore', 'person_data', r.id, 'allowed');
+      done.push(r.id);
+    }
+    return done;
   });
 }
+
 function hasActiveConsentAny(db: DatabaseSync, childId: number): boolean {
   return !!db.prepare(`SELECT 1 FROM parental_consents WHERE child_id = ? AND scope = 'data_processing' AND revoked_at IS NULL`).get(childId);
 }

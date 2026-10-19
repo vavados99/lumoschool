@@ -4,7 +4,9 @@
 import { DatabaseSync } from 'node:sqlite';
 import { chmodSync, copyFileSync, existsSync, renameSync, statSync, unlinkSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { SCHEMA_VERSION } from './db.ts';
+import { SCHEMA_VERSION, openDb } from './db.ts';
+import { audit } from './access.ts';
+import { reapplyErasures } from './consent.ts';
 
 export const REQUIRED_TABLES = ['users', 'contact_vault', 'students', 'teachers', 'parent_child', 'parental_consents', 'lessons',
   'lesson_enrollments', 'role_permissions', 'audit_log', 'credentials', 'sessions', 'login_attempts', 'settings', 'msg_threads', 'msg_posts'];
@@ -30,7 +32,19 @@ export function verifyBackup(file: string): { userVersion: number } {
   } finally { try { db?.close(); } catch { /* уже закрыта */ } }
 }
 
-export type RestoreResult = { target: string; safetyCopy: string | null };
+export type RestoreResult = { target: string; safetyCopy: string | null; reErased: number[]; warnings: string[] };
+
+/** «Надгробия» из рабочей базы (только чтение). Нет файла или нет таблицы (база старше v6) → пусто; нечитаемая база → unreadable. */
+function readTombstones(file: string): { rows: { user_id: number; erased_at: string }[]; unreadable: boolean } {
+  if (!existsSync(file)) return { rows: [], unreadable: false };
+  let db: DatabaseSync | null = null;
+  try {
+    db = new DatabaseSync(file, { readOnly: true });
+    if (!db.prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name='erased_subjects'`).get()) return { rows: [], unreadable: false };
+    return { rows: db.prepare('SELECT user_id, erased_at FROM erased_subjects').all() as { user_id: number; erased_at: string }[], unreadable: false };
+  } catch { return { rows: [], unreadable: true }; }
+  finally { try { db?.close(); } catch { /* */ } }
+}
 
 /** Восстановить target из копии. Битая копия → ошибка, target не тронут. Прежний target → <target>.pre-restore-<UTC> (0600). */
 export function restoreDb(backupFile: string, target: string, opts: { now?: number } = {}): RestoreResult {
@@ -39,11 +53,29 @@ export function restoreDb(backupFile: string, target: string, opts: { now?: numb
   verifyBackup(src);                                   // ДО любых изменений
 
   const tmp = `${dst}.restoring`;
+  let reErased: number[] = [];
+  const warnings: string[] = [];
   try {
     if (existsSync(tmp)) unlinkSync(tmp);
     copyFileSync(src, tmp);
     chmodSync(tmp, 0o600);
     verifyBackup(tmp);                                 // копия на диске назначения цела
+    // Ф26: стирание по просьбе не доходит до копий. Переносим «надгробия» (только id+время) из рабочей базы в восстановленную
+    // и повторно обезличиваем этих людей ДО подмены рабочего файла. Если рабочую базу прочитать нельзя — громкое предупреждение + запись в журнал.
+    const tomb = readTombstones(dst);
+    const nowMs = opts.now ?? Date.now();
+    const rdb = openDb(tmp);
+    try {
+      const ins = rdb.prepare('INSERT OR IGNORE INTO erased_subjects(user_id, erased_at) VALUES (?, ?)');
+      for (const t of tomb.rows) ins.run(t.user_id, t.erased_at);
+      reErased = reapplyErasures(rdb, nowMs);
+      if (tomb.unreadable) {
+        audit(rdb, null, 'restore.tombstones_unreadable', 'settings', null, 'denied');
+        warnings.push(`WARNING: working database ${dst} could not be read, so people erased after this backup was made could NOT be re-erased automatically. Repeat every erasure request received since the backup date.`);
+      }
+    } finally { rdb.close(); }
+    for (const ext of ['-wal', '-shm', '-journal']) { try { unlinkSync(tmp + ext); } catch { /* нет */ } }
+    verifyBackup(tmp);
   } catch (e) { try { unlinkSync(tmp); } catch { /* нет */ } throw e; }
 
   let safetyCopy: string | null = null;
@@ -57,7 +89,7 @@ export function restoreDb(backupFile: string, target: string, opts: { now?: numb
     for (const ext of ['-wal', '-shm', '-journal']) { try { unlinkSync(dst + ext); } catch { /* нет */ } }   // хвосты старой базы испортят новую
     renameSync(tmp, dst);
   } catch (e) { try { unlinkSync(tmp); } catch { /* нет */ } throw e; }
-  return { target: dst, safetyCopy };
+  return { target: dst, safetyCopy, reErased, warnings };
 }
 
 if (process.argv[1] && import.meta.url === new URL(`file://${resolve(process.argv[1])}`).href) {
@@ -66,6 +98,8 @@ if (process.argv[1] && import.meta.url === new URL(`file://${resolve(process.arg
   try {
     const r = restoreDb(file, target);
     console.log(`restore ok: ${r.target}`);
+    console.log(`re-erased after restore: ${r.reErased.length}`);
+    for (const w of r.warnings) console.error(w);
     console.log(r.safetyCopy ? `previous database kept as: ${r.safetyCopy}` : 'no previous database existed');
   } catch (e) { console.error(`restore FAILED: ${(e as Error).message}`); process.exit(1); }
 }
