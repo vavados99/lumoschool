@@ -16,7 +16,7 @@ if (process.argv[1] && import.meta.url === new URL(`file://${resolve(process.arg
     const owner = db.prepare(`SELECT id FROM users WHERE role = 'owner' ORDER BY id LIMIT 1`).get() as { id: number } | undefined;
     if (!owner) throw new Error('no owner user');
     const now = Date.now();
-    console.log('retention', JSON.stringify(runRetention(db, actorOf(db, owner.id), { now, ...(c.messageRetentionDays !== null && { messageDays: c.messageRetentionDays }), ...(c.loginAttemptRetentionDays !== null && { loginAttemptDays: c.loginAttemptRetentionDays }) })));
+    console.log('retention', JSON.stringify(runRetention(db, actorOf(db, owner.id), { now, ...(c.messageRetentionDays !== null && { messageDays: c.messageRetentionDays }), ...(c.loginAttemptRetentionDays !== null && { loginAttemptDays: c.loginAttemptRetentionDays }), ...(c.chatRetentionDays !== null && { chatDays: c.chatRetentionDays }), ...(c.auditRetentionDays !== null && { auditDays: c.auditRetentionDays }) })));
     console.log('sessions purged', purgeExpiredSessions(db, now), 'attempts purged', purgeOldAttempts(db, now));
   } catch (e) { console.error(`maintenance FAILED: ${(e as Error).message}`); process.exit(1); } finally { db.close(); }
 }

@@ -16,7 +16,7 @@ import { MessageRejected, listThreads, listNotifications, openThread, postMessag
 import { enterRoom, leaveRoom, roomState, postRoomMessage, callOwner, listOwnerCalls, setRecording, videoStub, RoomRefused } from './room.ts';
 import { ownerDashboard, readAuditPage, parsePeriod, AUDIT_DEFAULT_LIMIT } from './dashboard.ts';
 import { t, hasKey, pickLang, fromAcceptLanguage } from './i18n.ts';
-import { exportData, listConsents, revokeConsent } from './consent.ts';
+import { exportData, listConsents, revokeConsent, eraseData } from './consent.ts';
 
 export const COOKIE = 'sid';
 /** Ф18: имя куки сессии. Secure-режим → префикс __Host- (требует Secure, Path=/, без Domain — всё это у нас выполнено). */
@@ -188,6 +188,14 @@ function buildRoutes(schedulerHealth?: () => unknown): Route[] {
   add('POST', '/api/consents/:id/revoke', ['parent'], ({ db, actor, now, params, body }) => {
     const r = revokeConsent(db, actor, int(params[0], 'id'), scopeOf(body.scope), now);
     return { body: { cancelled: r.cancelled } };
+  });
+  // Ф25: удаление (обезличивание) человека по просьбе. Необратимо → нужен явный {"confirm": true}.
+  // HTTP: владелец (любого ученика/родителя) и родитель (себя или своего ребёнка до 18). Ученик и преподаватель — 403 ещё до разбора тела;
+  // ученик 16+ просит владельца (ограничение, см. docs). Чужой ребёнок / владелец / преподаватель / уже удалённый → 403 из ядра (consent.eraseData).
+  add('POST', '/api/erase/:id', ['owner', 'parent'], ({ db, actor, now, params, body }) => {
+    if (body.confirm !== true) throw new HttpError(400, 'bad_request', { field: 'confirm' });
+    eraseData(db, actor, int(params[0], 'id'), now);
+    return { body: { ok: true } };
   });
   add('GET', '/api/export/:id', ['student', 'parent', 'owner'], ({ db, actor, now, params }) => {
     const e = exportData(db, actor, int(params[0], 'id'), now);

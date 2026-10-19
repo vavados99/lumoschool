@@ -99,10 +99,11 @@ export function createScheduler(tasks: readonly Task[], opts: SchedulerOptions =
 }
 
 /** Чистка, как в maintenance.ts: срок хранения (от имени владельца) + просроченные сессии + старые попытки входа. */
-export function cleanupOnce(db: DatabaseSync, cfg: Pick<Config, 'messageRetentionDays' | 'loginAttemptRetentionDays'>, now = Date.now()): void {
+export function cleanupOnce(db: DatabaseSync, cfg: Pick<Config, 'messageRetentionDays' | 'loginAttemptRetentionDays'> & Partial<Pick<Config, 'chatRetentionDays' | 'auditRetentionDays'>>, now = Date.now()): void {
   const owner = db.prepare(`SELECT id FROM users WHERE role = 'owner' ORDER BY id LIMIT 1`).get() as { id: number } | undefined;
   if (!owner) throw new Error('no owner user');
-  runRetention(db, actorOf(db, owner.id), { now, ...(cfg.messageRetentionDays !== null && { messageDays: cfg.messageRetentionDays }), ...(cfg.loginAttemptRetentionDays !== null && { loginAttemptDays: cfg.loginAttemptRetentionDays }) });
+  runRetention(db, actorOf(db, owner.id), { now, ...(cfg.messageRetentionDays !== null && { messageDays: cfg.messageRetentionDays }), ...(cfg.loginAttemptRetentionDays !== null && { loginAttemptDays: cfg.loginAttemptRetentionDays }),
+    ...(cfg.chatRetentionDays != null && { chatDays: cfg.chatRetentionDays }), ...(cfg.auditRetentionDays != null && { auditDays: cfg.auditRetentionDays }) });
   purgeExpiredSessions(db, now);
   purgeOldAttempts(db, now);
 }

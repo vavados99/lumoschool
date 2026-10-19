@@ -104,7 +104,7 @@ export function listStudents(db: DatabaseSync, a: Actor, now = Date.now()): Prof
     : a.role === 'parent' ? 'child_profile.read' : 'own_profile.read', 'student', null, yes);
   const base = `SELECT DISTINCT u.id, u.display_name, s.level FROM users u JOIN students s ON s.user_id = u.id`;
   switch (a.role) {
-    case 'owner': return db.prepare(`${base} ORDER BY u.id`).all() as Profile[];
+    case 'owner': return db.prepare(`${base} WHERE u.anonymized_at IS NULL ORDER BY u.id`).all() as Profile[];   // Ф25: обезличенные не показываем
     case 'teacher': {
       const sub = activeSubstituteLessons(db, a.id, now);   // замена: только эти уроки
       const rows = db.prepare(

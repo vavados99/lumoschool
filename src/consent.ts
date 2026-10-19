@@ -14,7 +14,16 @@ export const LEGAL_RETENTION_DAYS = 6 * 365;
 export const MESSAGE_RETENTION_DAYS = 730;
 /** Попытки входа (IP-адреса — персональные данные): 90 дней, нужны только для защиты от перебора. */
 export const LOGIN_ATTEMPT_RETENTION_DAYS = 90;
-/** Журнал действий (audit_log) не чистится: он append-only и персональных данных не содержит (только числовые id). */
+/** Ф25: чат урока (room_messages) чистится через 90 дней. ПРЕДЛОЖЕНИЕ разработчика, НЕ согласовано с юристом. */
+export const CHAT_RETENTION_DAYS = 90;
+/** Ф25: журнал действий (audit_log) чистится через 365 дней. ПРЕДЛОЖЕНИЕ разработчика, НЕ согласовано с юристом.
+ *  Нижняя граница 30 дней: журнал нужен для расследования инцидентов, стереть его «в ноль» параметром нельзя. */
+export const AUDIT_RETENTION_DAYS = 365;
+export const MIN_AUDIT_RETENTION_DAYS = 30;
+/** Ф25: значение actor_id/target_id в журнале у обезличенного человека (настоящих id с 0 не бывает). */
+export const ERASED_ID = 0;
+/** Типы объектов журнала, у которых target_id — id человека (у 'lesson', 'thread', 'settings' и т.д. это не человек). */
+const PERSON_TARGET_TYPES = ['student', 'person_data', 'user', 'consent', 'contact_vault'] as const;
 
 const DAY = 86_400_000;
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -164,6 +173,7 @@ export function eraseData(db: DatabaseSync, a: Actor, subjectId: number, now = D
     db.prepare('DELETE FROM msg_posts WHERE from_id = ?').run(subjectId);
     db.prepare('DELETE FROM parent_notifications WHERE parent_id = ? OR child_id = ?').run(subjectId, subjectId);   // Ф18: уведомления родителю
     db.prepare('DELETE FROM messages WHERE from_id = ? OR to_id = ?').run(subjectId, subjectId);
+    db.prepare('DELETE FROM room_messages WHERE from_id = ?').run(subjectId);   // Ф25: реплики человека в чате уроков (раньше оставались)
     // входы
     const login = db.prepare('SELECT login FROM credentials WHERE user_id = ?').get(subjectId) as { login: string } | undefined;
     if (login) db.prepare('DELETE FROM login_attempts WHERE login = ?').run(login.login);
@@ -182,6 +192,12 @@ export function eraseData(db: DatabaseSync, a: Actor, subjectId: number, now = D
     db.prepare('UPDATE lesson_enrollments SET retain_until = ? WHERE student_id = ?').run(keepUntil, subjectId);
     db.prepare('UPDATE students SET level = NULL WHERE user_id = ?').run(subjectId);
     db.prepare(`UPDATE users SET display_name = 'Deleted user', birth_date = NULL, anonymized_at = ? WHERE id = ?`).run(iso(now), subjectId);
+    // Ф25: ссылки на человека в журнале → 0. Сами строки остаются: журнал нужен для безопасности (кто что делал, сколько отказов),
+    // но связать их с обезличенным человеком уже нельзя. Единственное исключение — итоговая строка 'data.erased' ниже:
+    // она пишется ПОСЛЕ и хранит id удалённого как доказательство, что удаление выполнено (id без данных не идентифицирует).
+    db.prepare('UPDATE audit_log SET actor_id = ? WHERE actor_id = ?').run(ERASED_ID, subjectId);
+    db.prepare(`UPDATE audit_log SET target_id = ? WHERE target_id = ? AND target_type IN (${PERSON_TARGET_TYPES.map(() => '?').join(',')})`)
+      .run(ERASED_ID, subjectId, ...PERSON_TARGET_TYPES);
     audit(db, a, 'data.erased', 'person_data', subjectId, 'allowed');
   });
 }
@@ -190,30 +206,40 @@ function hasActiveConsentAny(db: DatabaseSync, childId: number): boolean {
 }
 
 // ---------- срок хранения ----------
-export type RetentionOptions = { now?: number; messageDays?: number; loginAttemptDays?: number };
-export type RetentionResult = { messages: number; threads: number; login_attempts: number; consents: number; enrollments: number; users: number };
+export type RetentionOptions = { now?: number; messageDays?: number; loginAttemptDays?: number; chatDays?: number; auditDays?: number };
+export type RetentionResult = { messages: number; threads: number; login_attempts: number; consents: number; enrollments: number; users: number; room_messages: number; audit_log: number };
 
 /** Чистка просроченного. Только владелец (право retention.run). Параметры — в днях; по умолчанию см. константы выше:
- *  сообщения старше 730 дн.; попытки входа старше 90 дн.; строки согласий/записей с истёкшим retain_until (удалённые люди и отозванные согласия);
- *  обезличенные пользователи, на которых больше ничего не ссылается. Пустые ветки старше срока — тоже. Журнал не трогается.
+ *  сообщения старше 730 дн.; чат урока старше 90 дн.; журнал старше 365 дн. (не меньше 30); попытки входа старше 90 дн.; строки согласий/записей с истёкшим retain_until (удалённые люди и отозванные согласия);
+ *  обезличенные пользователи, на которых больше ничего не ссылается. Пустые ветки старше срока — тоже. Журнал: только строки старше срока.
  *  Итог (числа) — в ответ; в журнале — факт запуска. Запускать по расписанию должен внешний планировщик (в ядре расписания нет). */
 export function runRetention(db: DatabaseSync, a: Actor, opts: RetentionOptions = {}): RetentionResult {
   const now = opts.now ?? Date.now();
   const messageDays = opts.messageDays ?? MESSAGE_RETENTION_DAYS;
   const loginDays = opts.loginAttemptDays ?? LOGIN_ATTEMPT_RETENTION_DAYS;
-  if (![messageDays, loginDays].every(d => Number.isFinite(d) && d >= 0)) throw new Denied('bad retention parameters');
+  const chatDays = opts.chatDays ?? CHAT_RETENTION_DAYS;
+  const auditDays = opts.auditDays ?? AUDIT_RETENTION_DAYS;
+  if (![messageDays, loginDays, chatDays].every(d => Number.isFinite(d) && d >= 0)) throw new Denied('bad retention parameters');
+  if (!Number.isFinite(auditDays) || auditDays < MIN_AUDIT_RETENTION_DAYS) throw new Denied('bad retention parameters');   // журнал «в ноль» не стирается
   return inTx(db, () => {
     guard(db, a, 'retention.run', 'retention', null, () => a.role === 'owner');
     const ch = (sql: string, ...p: (string | number)[]) => Number(db.prepare(sql).run(...p).changes);
     const msgCut = sqlTime(now - messageDays * DAY);
-    const res: RetentionResult = { messages: 0, threads: 0, login_attempts: 0, consents: 0, enrollments: 0, users: 0 };
+    const res: RetentionResult = { messages: 0, threads: 0, login_attempts: 0, consents: 0, enrollments: 0, users: 0, room_messages: 0, audit_log: 0 };
     res.messages = ch('DELETE FROM msg_posts WHERE created_at < ?', msgCut);
     res.threads = ch(`DELETE FROM msg_threads WHERE created_at < ? AND id NOT IN (SELECT thread_id FROM msg_posts)`, msgCut);
     ch('DELETE FROM parent_notifications WHERE created_at < ?', msgCut);   // Ф18: уведомления живут столько же, сколько сообщения
+    res.room_messages = ch('DELETE FROM room_messages WHERE created_at < ?', sqlTime(now - chatDays * DAY));   // Ф25: чат урока
     res.login_attempts = ch('DELETE FROM login_attempts WHERE ts < ?', now - loginDays * DAY);
     res.consents = ch('DELETE FROM parental_consents WHERE retain_until IS NOT NULL AND retain_until < ? AND revoked_at IS NOT NULL', iso(now));
     res.enrollments = ch('DELETE FROM lesson_enrollments WHERE retain_until IS NOT NULL AND retain_until < ?', iso(now));
+    // Ф25: журнал старше срока. «Ворота» открыты только на время этого DELETE и закрываются сразу (и откатываются вместе с транзакцией).
+    db.exec('UPDATE audit_purge_gate SET open = 1 WHERE id = 1');
+    try { res.audit_log = ch('DELETE FROM audit_log WHERE ts < ?', sqlTime(now - auditDays * DAY)); }
+    finally { db.exec('UPDATE audit_purge_gate SET open = 0 WHERE id = 1'); }
     for (const u of db.prepare('SELECT id FROM users WHERE anonymized_at IS NOT NULL').all() as { id: number }[]) {
+      // Ф25: присутствие в комнате обезличенного — учёт посещаемости; уходит, когда у человека не осталось записей об уроках
+      ch('DELETE FROM room_presence WHERE user_id = ? AND NOT EXISTS (SELECT 1 FROM lesson_enrollments e WHERE e.student_id = ?)', u.id, u.id);
       try { res.users += ch('DELETE FROM users WHERE id = ?', u.id); } catch { /* ещё есть ссылки (FK) — оставляем до следующего прогона */ }
     }
     audit(db, a, 'retention.run', 'retention', null, 'allowed');

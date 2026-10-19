@@ -125,6 +125,13 @@ function matrix(s: S): Record<string, Record<Role5, Cell>> {
     },
     'POST /api/consents/:id': only(['parent'], `/api/consents/${id('KidA')}`, 201, {}, { scope: 'lesson_recording' }),
     'POST /api/consents/:id/revoke': only(['parent'], `/api/consents/${id('KidA')}/revoke`, 200, {}, {}),
+    'POST /api/erase/:id': {   // Ф25: родитель — своего ребёнка; владелец — любого ученика; ученик и преподаватель — 403 (ещё до разбора тела)
+      anon: anon(`/api/erase/${id('KidB')}`, { confirm: true }),
+      student: { as: 'AdultD', path: `/api/erase/${id('AdultD')}`, body: { confirm: true }, status: 403 },
+      parent: { as: 'ParentA', path: `/api/erase/${id('KidA')}`, body: { confirm: true }, status: 200 },
+      teacher: { as: 'TeacherA', path: `/api/erase/${id('KidA')}`, body: { confirm: true }, status: 403 },
+      owner: { as: 'Owner', path: `/api/erase/${id('KidB')}`, body: { confirm: true }, status: 200 },
+    },
     'GET /api/export/:id': {
       anon: anon(`/api/export/${id('AdultD')}`),
       student: { as: 'AdultD', path: `/api/export/${id('AdultD')}`, status: 200 },
@@ -152,7 +159,7 @@ test('Ф23: таблица «маршрут × роль → статус» по�
   const m = matrix(probe);
   const keys = routeTable().map(r => `${r.method} ${r.pattern}`).sort();
   assert.deepEqual(Object.keys(m).sort(), keys, 'таблица ячеек и routeTable() расходятся (новый/удалённый маршрут)');
-  assert.equal(keys.length, 30);
+  assert.equal(keys.length, 31);
   // таблица ячеек согласована со списком ролей маршрута: 403 «роль вне списка» ↔ роли нет в routeTable
   for (const r of routeTable()) {
     const row = m[`${r.method} ${r.pattern}`];
