@@ -215,8 +215,10 @@ function buildRoutes(schedulerHealth?: () => unknown): Route[] {
   add('GET', '/api/audit', ['owner'], ({ db, actor }) => ({ body: readAuditPage(db, actor, 500) as unknown as Json }));
 
   // Ф21: «живость» планировщика — только владелец; время и имена задач, никаких данных пользователей; в журнал не пишется
-  add('GET', '/api/owner/scheduler', ['owner'], () =>
-    ({ body: { enabled: !!schedulerHealth, tasks: (schedulerHealth?.() ?? {}) as Json } }));
+  add('GET', '/api/owner/scheduler', ['owner'], ({ actor }) => {
+    if (actor.role !== 'owner') throw new Denied('scheduler.read denied');   // Ф23: вторая линия (раньше защищал только список ролей маршрута)
+    return { body: { enabled: !!schedulerHealth, tasks: (schedulerHealth?.() ?? {}) as Json } };
+  });
   // Ф10: дашборд и постраничный журнал — строго владелец; чтение журнал не пополняет (см. dashboard.ts)
   add('GET', '/api/owner/dashboard', ['owner'], ({ db, actor, now, query }) => {
     const p = parsePeriod(query.get('from'), query.get('to'));
