@@ -31,6 +31,7 @@ export type ServerOptions = {
   trustedProxies?: readonly string[];   // Ф17: адреса прокси (TRUSTED_PROXY), от которых верим X-Forwarded-For
   loginDelayStepMs?: number;            // Ф17: шаг нарастающей задержки входа (тесты ставят 1)
   loginDelayMaxMs?: number;             // Ф17: потолок задержки (по умолчанию 5 с)
+  schedulerHealth?: () => unknown;      // Ф21: источник «живости» планировщика для GET /api/owner/scheduler (только владелец)
   rateLimit?: RateLimitOptions | false; // Ф19a: лимит частоты изменяющих запросов (false — выключен, только для проверки/отладки)
 };
 
@@ -111,7 +112,7 @@ const str = (v: unknown, what: string, max = 2100): string => {
   return v;
 };
 
-function buildRoutes(): Route[] {
+function buildRoutes(schedulerHealth?: () => unknown): Route[] {
   const R: Route[] = [];
   const add = (method: string, path: string, roles: readonly Role[], run: Route['run']) =>
     R.push({ method, path, re: new RegExp('^' + path.replace(/:id/g, '(\\d{1,12})') + '$'), roles, run });
@@ -213,6 +214,9 @@ function buildRoutes(): Route[] {
   // Ф18: дубль /api/owner/audit. Тот же постраничный ридер: чтение журнал не пополняет, вся таблица не читается (лимит 500 → не более AUDIT_MAX_LIMIT).
   add('GET', '/api/audit', ['owner'], ({ db, actor }) => ({ body: readAuditPage(db, actor, 500) as unknown as Json }));
 
+  // Ф21: «живость» планировщика — только владелец; время и имена задач, никаких данных пользователей; в журнал не пишется
+  add('GET', '/api/owner/scheduler', ['owner'], () =>
+    ({ body: { enabled: !!schedulerHealth, tasks: (schedulerHealth?.() ?? {}) as Json } }));
   // Ф10: дашборд и постраничный журнал — строго владелец; чтение журнал не пополняет (см. dashboard.ts)
   add('GET', '/api/owner/dashboard', ['owner'], ({ db, actor, now, query }) => {
     const p = parsePeriod(query.get('from'), query.get('to'));
@@ -302,7 +306,7 @@ export function clientIp(req: IncomingMessage, trusted: readonly string[]): stri
 export function createApp(db: DatabaseSync, opts: ServerOptions = {}): Server {
   const maxBody = opts.maxBody ?? DEFAULT_MAX_BODY;
   const clock = opts.now ?? Date.now;
-  const routes = buildRoutes();
+  const routes = buildRoutes(opts.schedulerHealth);
   const cookieAttrs = `Path=/; HttpOnly; SameSite=Strict${opts.secureCookie ? '; Secure' : ''}`;
   const cookieName = cookieNameFor(!!opts.secureCookie);   // Ф18: за HTTPS — __Host-sid (браузер не примет с чужого поддомена/пути)
 
@@ -413,6 +417,22 @@ export function listen(server: Server, port = 8787): Promise<number> {
   });
 }
 
+export const DEFAULT_SHUTDOWN_MS = 10_000;
+/**
+ * Ф21: остановка с дожиданием. Новые соединения не принимаются сразу; запросы в полёте получают ответ;
+ * простаивающие keep-alive соединения закрываются; если за timeoutMs не управились — оставшиеся рвутся.
+ * Возвращает { forced }: true, если пришлось рвать. Закрытие базы — на вызывающем (после этого вызова).
+ */
+export function stopGracefully(server: Server, timeoutMs = DEFAULT_SHUTDOWN_MS): Promise<{ forced: boolean }> {
+  return new Promise(resolve => {
+    let forced = false;
+    const timer = setTimeout(() => { forced = true; server.closeAllConnections(); }, timeoutMs);
+    timer.unref();
+    server.close(() => { clearTimeout(timer); resolve({ forced }); });   // вызывается, когда все соединения закрыты
+    server.closeIdleConnections();
+  });
+}
+
 if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
   const { openDb } = await import('./db.ts');
   const { loadConfig, ConfigError } = await import('./config.ts');
@@ -422,13 +442,24 @@ if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).
   catch (e) { console.error(`config error: ${e instanceof ConfigError ? e.message : 'invalid configuration'}`); process.exit(1); }
   setSessionSecret(cfg.sessionSecret);
   const db = openDb(cfg.databasePath);
-  const port = await listen(createApp(db, { secureCookie: cfg.cookieSecure, trustedProxies: cfg.trustedProxies }), cfg.port);
+  let sched: import('./scheduler.ts').Scheduler | null = null;
+  const server = createApp(db, { secureCookie: cfg.cookieSecure, trustedProxies: cfg.trustedProxies, schedulerHealth: () => sched?.health() ?? {} });
+  const port = await listen(server, cfg.port);
   console.log(`listening on 127.0.0.1:${port} (mode ${cfg.mode})`);
   // Ф19c: планировщик только в реальном сервере (не в тестах/seed), выключается SCHEDULER=off.
   // Реальной отправки нет: вне prod уведомления идут в консольный сток; в prod без настоящего канала очередь не трогаем (останется ждать).
   const { startScheduler } = await import('./scheduler.ts');
   const { ConsoleSink } = await import('./notify.ts');
-  const sched = startScheduler(db, cfg, cfg.mode === 'prod' ? null : new ConsoleSink());
-  const shutdown = () => { sched?.stop(); process.exit(0); };
-  process.once('SIGINT', shutdown); process.once('SIGTERM', shutdown);
+  sched = startScheduler(db, cfg, cfg.mode === 'prod' ? null : new ConsoleSink());
+  // Ф21: остановка с дожиданием запросов в полёте (SHUTDOWN_TIMEOUT_MS, по умолчанию 10 с), затем закрытие базы
+  let stopping = false;
+  const shutdown = async () => {
+    if (stopping) return; stopping = true;
+    sched?.stop();
+    const { forced } = await stopGracefully(server, cfg.shutdownTimeoutMs);
+    if (forced) console.log('shutdown: timeout, remaining connections dropped');
+    try { db.close(); } catch { /* уже закрыта */ }
+    process.exit(0);
+  };
+  process.on('SIGINT', () => { void shutdown(); }); process.on('SIGTERM', () => { void shutdown(); });
 }

@@ -25,7 +25,10 @@ export type SchedulerEvent = { task: string; event: 'ok' | 'skipped_overlap' | '
 export type SchedulerOptions = {
   timers?: TimerApi;
   onEvent?: (e: SchedulerEvent) => void;   // журнал: вызывающий пишет в audit_log/лог
+  now?: () => number;                       // Ф21: часы для «живости» (тесты)
 };
+/** Ф21: «живость» задачи в памяти — только время и класс события, без текста ошибок и данных. */
+export type TaskHealth = { intervalMs: number; lastOkAt: number | null; lastEvent: SchedulerEvent['event'] | null; lastEventAt: number | null; okCount: number; failCount: number };
 
 const realTimers: TimerApi = {
   setInterval: (fn, ms) => { const h = setInterval(fn, ms); h.unref(); return h; },
@@ -44,6 +47,8 @@ export type Scheduler = {
   /** Один запуск задачи по имени (то же, что делает таймер: с защитой от наложения и изоляцией сбоя). */
   tick(name: string): Promise<void>;
   intervals(): Record<string, number>;
+  /** Ф21: когда задача в последний раз успешно отработала. Только память процесса: в audit_log тики не пишутся. */
+  health(): Record<string, TaskHealth>;
 };
 
 export function createScheduler(tasks: readonly Task[], opts: SchedulerOptions = {}): Scheduler {
@@ -53,16 +58,26 @@ export function createScheduler(tasks: readonly Task[], opts: SchedulerOptions =
   const handles: unknown[] = [];
   let started = false, stopped = false;
   const byName = new Map(tasks.map(t => [t.name, t]));
+  const clock = opts.now ?? Date.now;
+  const live = new Map<string, { lastOkAt: number | null; lastEvent: SchedulerEvent['event'] | null; lastEventAt: number | null; okCount: number; failCount: number }>(
+    tasks.map(t => [t.name, { lastOkAt: null, lastEvent: null, lastEventAt: null, okCount: 0, failCount: 0 }]));
+  const note = (name: string, ev: SchedulerEvent['event']) => {
+    const h = live.get(name); if (!h) return;
+    h.lastEvent = ev; h.lastEventAt = clock();
+    if (ev === 'ok') { h.lastOkAt = h.lastEventAt; h.okCount++; } else if (ev === 'failed') h.failCount++;
+  };
 
   async function tick(name: string): Promise<void> {
     const t = byName.get(name);
     if (!t || stopped) return;
-    if (running.has(name)) { emit({ task: name, event: 'skipped_overlap' }); return; }
+    if (running.has(name)) { note(name, 'skipped_overlap'); emit({ task: name, event: 'skipped_overlap' }); return; }
     running.add(name);
     try {
       await t.run();
+      note(name, 'ok');
       emit({ task: name, event: 'ok' });
     } catch (e) {
+      note(name, 'failed');
       emit({ task: name, event: 'failed', error: e instanceof Error ? e.name : 'Error' });
     } finally { running.delete(name); }
   }
@@ -79,6 +94,7 @@ export function createScheduler(tasks: readonly Task[], opts: SchedulerOptions =
     },
     tick,
     intervals: () => Object.fromEntries(tasks.map(t => [t.name, effectiveInterval(t)])),
+    health: () => Object.fromEntries(tasks.map(t => [t.name, { intervalMs: effectiveInterval(t), ...live.get(t.name)! }])),
   };
 }
 

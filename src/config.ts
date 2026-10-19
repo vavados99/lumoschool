@@ -18,6 +18,7 @@ export type Config = {
   readonly outboxIntervalMs: number;                 // SCHEDULER_OUTBOX_MS
   readonly backupIntervalMs: number;                 // SCHEDULER_BACKUP_MS
   readonly cleanupIntervalMs: number;                // SCHEDULER_CLEANUP_MS
+  readonly shutdownTimeoutMs: number;                // Ф21: SHUTDOWN_TIMEOUT_MS — сколько ждать запросы в полёте при остановке
   readonly sessionSecret: string;                    // не перечисляется, в JSON/логах скрыт
 };
 
@@ -80,6 +81,8 @@ export function loadConfig(env: Env = process.env, opts: LoadOptions = {}): Conf
   const backupIntervalMs = intVar(env, 'SCHEDULER_BACKUP_MS', 1, 604_800_000, 86_400_000)!;
   const cleanupIntervalMs = intVar(env, 'SCHEDULER_CLEANUP_MS', 1, 604_800_000, 3_600_000)!;
 
+  const shutdownTimeoutMs = intVar(env, 'SHUTDOWN_TIMEOUT_MS', 100, 600_000, 10_000)!;
+
   let sessionSecret = '';
   if (opts.secret !== false) {
     const s = get(env, 'SESSION_SECRET');
@@ -93,7 +96,7 @@ export function loadConfig(env: Env = process.env, opts: LoadOptions = {}): Conf
     }
   }
 
-  const cfg = { mode, port, databasePath, backupDir, backupKeep, cookieSecure, trustedProxies, messageRetentionDays, loginAttemptRetentionDays, schedulerEnabled: sch !== 'off', outboxIntervalMs, backupIntervalMs, cleanupIntervalMs } as Config;
+  const cfg = { mode, port, databasePath, backupDir, backupKeep, cookieSecure, trustedProxies, messageRetentionDays, loginAttemptRetentionDays, schedulerEnabled: sch !== 'off', outboxIntervalMs, backupIntervalMs, cleanupIntervalMs, shutdownTimeoutMs } as Config;
   // секрет — не перечисляемое поле: не попадёт в JSON.stringify, console.log, Object.keys
   Object.defineProperty(cfg, 'sessionSecret', { value: sessionSecret, enumerable: false });
   Object.defineProperty(cfg, 'toString', { value: () => `[Config mode=${mode}]`, enumerable: false });
