@@ -10,6 +10,10 @@
   "error.too_many_attempts": "Zu viele Versuche. Bitte versuche es später erneut.",
   "error.rate_limited": "Zu viele Anfragen. Bitte warten Sie kurz und versuchen Sie es erneut.",
   "error.not_available": "Das ist nicht verfügbar.",
+  "error.request_exists": "Ein Löschantrag ist bereits offen.",
+  "error.request_not_pending": "Dieser Antrag wurde bereits entschieden.",
+  "error.parent_confirmation_required": "Zuerst muss ein Elternteil den Antrag bestätigen.",
+  "error.identity_not_checked": "Die Identität wurde nicht geprüft: ohne Identitätsprüfung werden keine Daten gelöscht.",
   "error.conflict": "Das passt nicht zum aktuellen Stundenplan.",
   "error.internal_error": "Auf unserer Seite ist ein Fehler aufgetreten. Bitte versuche es später erneut.",
   "error.message_rejected": "Die Nachricht wurde nicht gesendet, weil sie gegen die Chatregeln verstößt.",
@@ -53,5 +57,6 @@
   },
   "notify.subject": "Neue Nachricht in Ihrem Konto",
   "notify.thread_message": "Es gibt eine neue Nachricht einer Lehrkraft an Ihr Kind. Bitte melden Sie sich in Ihrem Konto an, um sie zu lesen.",
-  "notify.room_message": "Im Unterrichts-Chat Ihres Kindes gibt es eine neue Nachricht. Bitte melden Sie sich in Ihrem Konto an, um sie zu sehen."
+  "notify.room_message": "Im Unterrichts-Chat Ihres Kindes gibt es eine neue Nachricht. Bitte melden Sie sich in Ihrem Konto an, um sie zu sehen.",
+  "notify.erasure_request": "Ihr Kind hat einen Antrag auf Löschung der Daten gestellt. Bitte melden Sie sich in Ihrem Konto an, um ihn zu bestätigen oder einzusehen."
 }

@@ -17,6 +17,10 @@ import { enterRoom, leaveRoom, roomState, postRoomMessage, callOwner, listOwnerC
 import { ownerDashboard, readAuditPage, parsePeriod, AUDIT_DEFAULT_LIMIT } from './dashboard.ts';
 import { t, hasKey, pickLang, fromAcceptLanguage } from './i18n.ts';
 import { exportData, listConsents, revokeConsent, eraseData } from './consent.ts';
+import {
+  ErasureError, NOTE_CODES, submitRequest, listMine, parentConfirm, listAll, decide as decideRequest,
+  type ErasureRequest, type ErasureStatus, type NoteCode,
+} from './erasure.ts';
 
 export const COOKIE = 'sid';
 /** Ф18: имя куки сессии. Secure-режим → префикс __Host- (требует Secure, Path=/, без Domain — всё это у нас выполнено). */
@@ -93,6 +97,24 @@ function serializePost(role: Role, p: Post & { role?: string }): Json {
 }
 
 // ---------- ошибки ----------
+/** Ф28: коды отказов канала удаления → HTTP. Каждый код имеет ключ error.<код> в 6 языках (сторож i18n). */
+function wrapErasure<T>(fn: () => T): T {
+  try { return fn(); } catch (e) {
+    if (!(e instanceof ErasureError)) throw e;
+    switch (e.code) {
+      case 'request_exists': throw new HttpError(409, 'request_exists');
+      case 'request_not_pending': throw new HttpError(409, 'request_not_pending');
+      case 'parent_confirmation_required': throw new HttpError(409, 'parent_confirmation_required');
+      case 'identity_not_checked': throw new HttpError(422, 'identity_not_checked');
+    }
+    throw e;
+  }
+}
+/** Заявка для роли: белый список полей. Владельцу — ещё кто решил и проверена ли личность; остальным — только суть. Имён и контактов нет. */
+function serializeErasure(role: Role, r: ErasureRequest): Json {
+  const base: Json = { id: r.id, subject_id: r.subject_id, via: r.via, status: r.status, created_at: r.created_at, decided_at: r.decided_at, note: r.note };
+  return role === 'owner' ? { ...base, requested_by: r.requested_by, decided_by: r.decided_by, identity_checked: r.identity_checked } : base;
+}
 class HttpError extends Error {
   status: number; code: string; extra: Json; headers: Record<string, string>;
   constructor(status: number, code: string, extra: Json = {}, headers: Record<string, string> = {}) { super(code); this.name = 'HttpError'; this.status = status; this.code = code; this.extra = extra; this.headers = headers; }
@@ -219,6 +241,30 @@ function buildRoutes(schedulerHealth?: () => unknown, eraser: typeof eraseData =
   add('GET', '/api/rooms/:id/video', ALL, ({ db, actor, now, params }) => ({ body: videoStub(db, actor, rid(params), now) as unknown as Json }));
   add('GET', '/api/room-calls', ['owner'], ({ db, actor }) =>
     ({ body: { calls: listOwnerCalls(db, actor).map(c => ({ id: c.id, ts: c.ts, lesson_id: c.lesson_id, caller_id: c.caller_id, caller_role: c.caller_role, caller_name: c.caller_name })) } }));
+
+  // Ф28: канал приёма просьб об удалении (заглушка: уведомления — только через outbox/сток). Ядро — erasure.ts (второй слой: права role_permissions).
+  add('POST', '/api/erasure-requests', ['student', 'parent'], ({ db, actor, now, body }) => {
+    const sid = body.student_id === undefined ? null : int(body.student_id, 'student_id');
+    return { status: 201, body: { request: serializeErasure(actor.role, wrapErasure(() => submitRequest(db, actor, sid, now))) } };
+  });
+  add('GET', '/api/erasure-requests', ['student', 'parent'], ({ db, actor, now }) =>
+    ({ body: { requests: listMine(db, actor, now).map(r => serializeErasure(actor.role, r)) } }));
+  add('POST', '/api/erasure-requests/:id/parent-confirm', ['parent'], ({ db, actor, now, params }) =>
+    ({ body: { request: serializeErasure(actor.role, wrapErasure(() => parentConfirm(db, actor, int(params[0], 'id'), now))) } }));
+  add('GET', '/api/owner/erasure-requests', ['owner'], ({ db, actor, query }) => {
+    const st = query.get('status');
+    if (st !== null && !['pending_parent', 'pending_owner', 'done', 'rejected'].includes(st)) throw new HttpError(400, 'bad_request', { field: 'status' });
+    return { body: { requests: listAll(db, actor, (st ?? undefined) as ErasureStatus | undefined).map(r => serializeErasure(actor.role, r)) } };
+  });
+  add('POST', '/api/owner/erasure-requests/:id/decision', ['owner'], ({ db, actor, now, params, body }) => {
+    if (body.decision !== 'approve' && body.decision !== 'reject') throw new HttpError(400, 'bad_request', { field: 'decision' });
+    const ic = body.identity_checked;
+    if (ic !== undefined && ic !== true && ic !== false && ic !== 0 && ic !== 1) throw new HttpError(400, 'bad_request', { field: 'identity_checked' });
+    const note = body.note === undefined || body.note === null ? null : body.note;
+    if (note !== null && !(NOTE_CODES as readonly unknown[]).includes(note)) throw new HttpError(400, 'bad_request', { field: 'note' });   // свободного текста нет — только коды
+    const r = wrapErasure(() => decideRequest(db, actor, int(params[0], 'id'), body.decision as 'approve' | 'reject', ic === true || ic === 1, note as NoteCode | null, now, eraser));
+    return { body: { request: serializeErasure(actor.role, r) } };
+  });
 
   // Ф18: дубль /api/owner/audit. Тот же постраничный ридер: чтение журнал не пополняет, вся таблица не читается (лимит 500 → не более AUDIT_MAX_LIMIT).
   add('GET', '/api/audit', ['owner'], ({ db, actor }) => ({ body: readAuditPage(db, actor, 500) as unknown as Json }));

@@ -10,6 +10,10 @@
   "error.too_many_attempts": "Zbyt wiele prób. Spróbuj ponownie później.",
   "error.rate_limited": "Zbyt wiele żądań. Zwolnij i spróbuj ponownie za chwilę.",
   "error.not_available": "To jest niedostępne.",
+  "error.request_exists": "Wniosek o usunięcie danych jest już otwarty.",
+  "error.request_not_pending": "Wniosek został już rozpatrzony.",
+  "error.parent_confirmation_required": "Najpierw wniosek musi potwierdzić rodzic.",
+  "error.identity_not_checked": "Tożsamość nie została potwierdzona: bez weryfikacji tożsamości dane nie zostaną usunięte.",
   "error.conflict": "To koliduje z aktualnym harmonogramem.",
   "error.internal_error": "Po naszej stronie wystąpił błąd. Spróbuj ponownie później.",
   "error.message_rejected": "Wiadomość nie została wysłana, ponieważ łamie zasady czatu.",
@@ -59,5 +63,6 @@
   },
   "notify.subject": "Nowa wiadomość w Twoim koncie",
   "notify.thread_message": "Jest nowa wiadomość od nauczyciela dla Twojego dziecka. Zaloguj się do konta, aby ją zobaczyć.",
-  "notify.room_message": "W czacie lekcji Twojego dziecka jest nowa wiadomość. Zaloguj się do konta, aby ją zobaczyć."
+  "notify.room_message": "W czacie lekcji Twojego dziecka jest nowa wiadomość. Zaloguj się do konta, aby ją zobaczyć.",
+  "notify.erasure_request": "Twoje dziecko złożyło wniosek o usunięcie danych. Zaloguj się do konta, aby go potwierdzić lub zobaczyć."
 }

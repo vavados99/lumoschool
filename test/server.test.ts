@@ -411,6 +411,9 @@ test('таблица маршрутов и ролей совпадает с эт
     `GET /api/threads ${ALLR}`, 'POST /api/threads parent,student,teacher', `GET /api/threads/:id ${ALLR}`, 'POST /api/threads/:id/messages parent,student,teacher',
     'GET /api/consents/:id owner,parent,student', 'POST /api/consents/:id parent', 'POST /api/consents/:id/revoke parent',
     'POST /api/erase/:id owner,parent',
+    // Ф28: канал просьб об удалении
+    'POST /api/erasure-requests parent,student', 'GET /api/erasure-requests parent,student', 'POST /api/erasure-requests/:id/parent-confirm parent',
+    'GET /api/owner/erasure-requests owner', 'POST /api/owner/erasure-requests/:id/decision owner',
     'GET /api/notifications parent',   // Ф18
     'GET /api/export/:id owner,parent,student', 'GET /api/audit owner',
     // Ф9: комната урока

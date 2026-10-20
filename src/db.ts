@@ -10,6 +10,7 @@ const MIGRATIONS = [
   new URL('../db/migrations/004-outbox.sql', import.meta.url),  // v4: Ф19b очередь доставки уведомлений
   new URL('../db/migrations/005-audit-retention.sql', import.meta.url),  // v5: Ф25 срок хранения журнала, обезличивание ссылок
   new URL('../db/migrations/006-erased-subjects.sql', import.meta.url),  // v6: Ф26 «надгробия» стёртых (повторное стирание при restore)
+  new URL('../db/migrations/007-erasure-requests.sql', import.meta.url),  // v7: Ф28 канал приёма просьб об удалении
 ];
 
 /** Версия схемы, которую знает этот код (= число миграций). */

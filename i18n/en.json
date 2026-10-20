@@ -10,6 +10,10 @@
   "error.too_many_attempts": "Too many attempts. Try again later.",
   "error.rate_limited": "Too many requests. Please slow down and try again shortly.",
   "error.not_available": "This is not available.",
+  "error.request_exists": "A deletion request is already open.",
+  "error.request_not_pending": "This request has already been decided.",
+  "error.parent_confirmation_required": "A parent must confirm this request first.",
+  "error.identity_not_checked": "Identity has not been verified: data is not deleted without an identity check.",
   "error.conflict": "This conflicts with the current schedule.",
   "error.internal_error": "Something went wrong on our side. Please try again later.",
   "error.message_rejected": "The message was not sent because it breaks the chat rules.",
@@ -53,5 +57,6 @@
   },
   "notify.subject": "New message in your account",
   "notify.thread_message": "Your child has a new message from a teacher. Please sign in to your account to read it.",
-  "notify.room_message": "There is a new message in your child's lesson chat. Please sign in to your account to see it."
+  "notify.room_message": "There is a new message in your child's lesson chat. Please sign in to your account to see it.",
+  "notify.erasure_request": "Your child has submitted a data deletion request. Please sign in to your account to confirm or review it."
 }

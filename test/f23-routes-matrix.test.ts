@@ -31,6 +31,8 @@ async function start() {
   const ly = ins('TeacherB', 21, 'minor');   // свободный детский урок (запись детей родителем/владельцем)
   const lz = ins('TeacherA', 22, 'minor');   // будущий детский урок с записью KidA (отмена вне окна 24 ч)
   for (const k of ['KidA']) db.prepare('INSERT INTO lesson_enrollments(lesson_id, student_id) VALUES (?,?)').run(lz, demo.users[k].id);
+  // Ф28: фикстура для ячеек канала удаления — открытая заявка №1 (KidA ждёт родителя; напрямую в таблицу: через API KidA младше 16 подать не может)
+  db.prepare(`INSERT INTO erasure_requests(subject_id, requested_by, via, status) VALUES (?,?,'self','pending_parent')`).run(demo.users.KidA.id, demo.users.KidA.id);
   const server = createApp(db, { now: () => clock.t, rateLimit: false });
   servers.push(server);
   const port = await listen(server, 0);
@@ -132,6 +134,18 @@ function matrix(s: S): Record<string, Record<Role5, Cell>> {
       teacher: { as: 'TeacherA', path: `/api/erase/${id('KidA')}`, body: { confirm: true }, status: 403 },
       owner: { as: 'Owner', path: `/api/erase/${id('KidB')}`, body: { confirm: true }, status: 200 },
     },
+    // Ф28: канал просьб об удалении. Фикстура start(): заявка №1 (pending_parent) на KidA. Преподаватель и (где нет роли) владелец — 403 до разбора тела.
+    'POST /api/erasure-requests': {
+      anon: anon('/api/erasure-requests', {}),
+      student: { as: 'AdultD', path: '/api/erasure-requests', body: {}, status: 201 },                          // 18+ → владельцу
+      parent: { as: 'ParentB', path: '/api/erasure-requests', body: { student_id: id('KidB') }, status: 201 },  // за своего ребёнка
+      teacher: { as: 'TeacherA', path: '/api/erasure-requests', body: { student_id: id('KidA') }, status: 403 },
+      owner: { as: 'Owner', path: '/api/erasure-requests', body: { student_id: id('KidA') }, status: 403 },
+    },
+    'GET /api/erasure-requests': only(['student', 'parent'], '/api/erasure-requests', 200),
+    'POST /api/erasure-requests/:id/parent-confirm': only(['parent'], '/api/erasure-requests/1/parent-confirm', 200, {}, {}),
+    'GET /api/owner/erasure-requests': only(['owner'], '/api/owner/erasure-requests', 200),
+    'POST /api/owner/erasure-requests/:id/decision': only(['owner'], '/api/owner/erasure-requests/1/decision', 200, {}, { decision: 'reject', identity_checked: false, note: 'other' }),
     'GET /api/export/:id': {
       anon: anon(`/api/export/${id('AdultD')}`),
       student: { as: 'AdultD', path: `/api/export/${id('AdultD')}`, status: 200 },
@@ -159,7 +173,7 @@ test('Ф23: таблица «маршрут × роль → статус» по�
   const m = matrix(probe);
   const keys = routeTable().map(r => `${r.method} ${r.pattern}`).sort();
   assert.deepEqual(Object.keys(m).sort(), keys, 'таблица ячеек и routeTable() расходятся (новый/удалённый маршрут)');
-  assert.equal(keys.length, 31);
+  assert.equal(keys.length, 36);
   // таблица ячеек согласована со списком ролей маршрута: 403 «роль вне списка» ↔ роли нет в routeTable
   for (const r of routeTable()) {
     const row = m[`${r.method} ${r.pattern}`];
@@ -175,7 +189,7 @@ test('Ф23: таблица «маршрут × роль → статус» по�
 for (const key of Object.keys(matrix({ id: () => 1, demo: { lessons: { a1: 1, a2: 2, thread: 1 } }, lx: 1, ly: 2, lz: 3, lessonStart: 0 } as unknown as S))) {
   test(`Ф23 матрица: ${key} × (аноним, ученик, родитель, преподаватель, владелец)`, async () => {
     const s = await start();
-    await s.loginAs('Owner', 'TeacherA', 'ParentA', 'KidA', 'AdultD');
+    await s.loginAs('Owner', 'TeacherA', 'ParentA', 'ParentB', 'KidA', 'AdultD');
     const row = matrix(s)[key];
     const [method, ...rest] = key.split(' ');
     void rest;

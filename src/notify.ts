@@ -11,7 +11,7 @@ export interface OutboxMessage {
   key: string;          // стабильный ключ идемпотентности (по нему канал может отсечь дубль)
   to_user_id: number;   // родитель
   lang: string;
-  kind: 'thread_message' | 'room_message';
+  kind: 'thread_message' | 'room_message' | 'erasure_request';
   subject: string;
   body: string;
 }
@@ -40,7 +40,7 @@ export class FileSink implements Sender {
   send(msg: OutboxMessage) { appendFileSync(this.path, JSON.stringify(msg) + '\n'); }
 }
 
-type Row = { id: number; attempts: number; notification_id: number; parent_id: number; kind: 'thread_message' | 'room_message'; lang: string | null };
+type Row = { id: number; attempts: number; notification_id: number; parent_id: number; kind: 'thread_message' | 'room_message' | 'erasure_request'; lang: string | null };
 
 export function buildMessage(r: Pick<Row, 'notification_id' | 'parent_id' | 'kind' | 'lang'>): OutboxMessage {
   const lang = isLang(r.lang) ? r.lang : DEFAULT_LANG;
