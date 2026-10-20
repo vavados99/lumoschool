@@ -11,6 +11,7 @@
   "error.rate_limited": "Zu viele Anfragen. Bitte warten Sie kurz und versuchen Sie es erneut.",
   "error.not_available": "Das ist nicht verfügbar.",
   "error.request_exists": "Ein Löschantrag ist bereits offen.",
+  "error.request_limit": "Zu viele Löschanträge heute. Bitte morgen erneut versuchen.",
   "error.request_not_pending": "Dieser Antrag wurde bereits entschieden.",
   "error.parent_confirmation_required": "Zuerst muss ein Elternteil den Antrag bestätigen.",
   "error.identity_not_checked": "Die Identität wurde nicht geprüft: ohne Identitätsprüfung werden keine Daten gelöscht.",

@@ -19,10 +19,12 @@ export type NoteCode = (typeof NOTE_CODES)[number];
 
 /** Отказ с кодом (сервер переводит в HTTP-статус и error.<код>). Наследует ScheduleError: транзакция коммитится, запись в журнале остаётся. */
 export class ErasureError extends ScheduleError {
-  code: 'request_exists' | 'parent_confirmation_required' | 'identity_not_checked' | 'request_not_pending';
+  code: 'request_exists' | 'request_limit' | 'parent_confirmation_required' | 'identity_not_checked' | 'request_not_pending';
   constructor(code: ErasureError['code']) { super(code); this.name = 'ErasureError'; this.code = code; }
 }
 
+/** Ф30: не больше стольких заявок на одного субъекта за скользящие сутки (любой статус) — иначе заявки заваливают родителей уведомлениями. */
+export const ERASURE_DAILY_LIMIT = 3;
 const COLS = 'id, subject_id, requested_by, via, status, created_at, decided_at, decided_by, identity_checked, note';
 const live = (db: DatabaseSync, id: number) => !!db.prepare('SELECT 1 FROM users WHERE id = ? AND anonymized_at IS NULL').get(id);
 const parentIds = (db: DatabaseSync, childId: number) =>
@@ -50,7 +52,9 @@ export function submitRequest(db: DatabaseSync, a: Actor, subjectId: number | nu
       audit(db, a, 'erasure.request.duplicate', 'erasure_request', null, 'denied');
       throw new ErasureError('request_exists');
     }
-    const id = Number(db.prepare('INSERT INTO erasure_requests(subject_id, requested_by, via, status) VALUES (?,?,?,?)').run(subject, a.id, via, status).lastInsertRowid);
+    const recent = db.prepare(`SELECT COUNT(*) c FROM erasure_requests WHERE subject_id = ? AND created_at > datetime(?, 'unixepoch')`).get(subject, Math.floor(now / 1000) - 86_400) as { c: number };
+    if (recent.c >= ERASURE_DAILY_LIMIT) { audit(db, a, 'erasure.request.limited', 'erasure_request', null, 'denied'); throw new ErasureError('request_limit'); }
+    const id = Number(db.prepare(`INSERT INTO erasure_requests(subject_id, requested_by, via, status, created_at) VALUES (?,?,?,?, datetime(?, 'unixepoch'))`).run(subject, a.id, via, status, Math.floor(now / 1000)).lastInsertRowid);
     audit(db, a, 'erasure.requested', 'erasure_request', id, 'allowed');
     if (status === 'pending_parent') notifyParents(db, subject, id);
     return get(db, id)!;

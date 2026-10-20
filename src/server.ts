@@ -103,6 +103,7 @@ function wrapErasure<T>(fn: () => T): T {
     if (!(e instanceof ErasureError)) throw e;
     switch (e.code) {
       case 'request_exists': throw new HttpError(409, 'request_exists');
+      case 'request_limit': throw new HttpError(429, 'request_limit');
       case 'request_not_pending': throw new HttpError(409, 'request_not_pending');
       case 'parent_confirmation_required': throw new HttpError(409, 'parent_confirmation_required');
       case 'identity_not_checked': throw new HttpError(422, 'identity_not_checked');

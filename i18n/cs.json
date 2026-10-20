@@ -11,6 +11,7 @@
   "error.rate_limited": "Příliš mnoho požadavků. Chvíli počkejte a zkuste to znovu.",
   "error.not_available": "To není dostupné.",
   "error.request_exists": "Žádost o smazání už je otevřená.",
+  "error.request_limit": "Příliš mnoho žádostí o smazání za den. Zkuste to zítra.",
   "error.request_not_pending": "Tato žádost už byla vyřízena.",
   "error.parent_confirmation_required": "Žádost musí nejdřív potvrdit rodič.",
   "error.identity_not_checked": "Totožnost nebyla ověřena: bez ověření totožnosti se data nesmažou.",

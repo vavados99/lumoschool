@@ -11,6 +11,7 @@
   "error.rate_limited": "Забагато запитів. Зачекайте трохи й спробуйте ще раз.",
   "error.not_available": "Це недоступно.",
   "error.request_exists": "Заявка на видалення вже відкрита.",
+  "error.request_limit": "Забагато заявок на видалення за добу. Спробуйте завтра.",
   "error.request_not_pending": "Заявка вже розглянута.",
   "error.parent_confirmation_required": "Спершу заявку має підтвердити один із батьків.",
   "error.identity_not_checked": "Особу не підтверджено: без перевірки особи видалення не виконується.",

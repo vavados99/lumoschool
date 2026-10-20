@@ -11,6 +11,7 @@
   "error.rate_limited": "Zbyt wiele żądań. Zwolnij i spróbuj ponownie za chwilę.",
   "error.not_available": "To jest niedostępne.",
   "error.request_exists": "Wniosek o usunięcie danych jest już otwarty.",
+  "error.request_limit": "Zbyt wiele wniosków o usunięcie danych w ciągu doby. Spróbuj jutro.",
   "error.request_not_pending": "Wniosek został już rozpatrzony.",
   "error.parent_confirmation_required": "Najpierw wniosek musi potwierdzić rodzic.",
   "error.identity_not_checked": "Tożsamość nie została potwierdzona: bez weryfikacji tożsamości dane nie zostaną usunięte.",
