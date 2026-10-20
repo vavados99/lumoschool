@@ -144,6 +144,7 @@ function matrix(s: S): Record<string, Record<Role5, Cell>> {
     },
     'GET /api/erasure-requests': only(['student', 'parent'], '/api/erasure-requests', 200),
     'POST /api/erasure-requests/:id/parent-confirm': only(['parent'], '/api/erasure-requests/1/parent-confirm', 200, {}, {}),
+    'POST /api/erasure-requests/:id/parent-reject': only(['parent'], '/api/erasure-requests/1/parent-reject', 200, {}, {}),
     'GET /api/owner/erasure-requests': only(['owner'], '/api/owner/erasure-requests', 200),
     'POST /api/owner/erasure-requests/:id/decision': only(['owner'], '/api/owner/erasure-requests/1/decision', 200, {}, { decision: 'reject', identity_checked: false, note: 'other' }),
     'GET /api/export/:id': {
@@ -173,7 +174,7 @@ test('Ф23: таблица «маршрут × роль → статус» по�
   const m = matrix(probe);
   const keys = routeTable().map(r => `${r.method} ${r.pattern}`).sort();
   assert.deepEqual(Object.keys(m).sort(), keys, 'таблица ячеек и routeTable() расходятся (новый/удалённый маршрут)');
-  assert.equal(keys.length, 36);
+  assert.equal(keys.length, 37);
   // таблица ячеек согласована со списком ролей маршрута: 403 «роль вне списка» ↔ роли нет в routeTable
   for (const r of routeTable()) {
     const row = m[`${r.method} ${r.pattern}`];

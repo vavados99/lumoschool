@@ -367,7 +367,7 @@ test('Ф28 миграция 007: база версии 6 с уже лежаще�
     d.exec(`INSERT INTO notification_outbox(notification_id, status, attempts) VALUES (1,'sent',1),(2,'pending',0)`);
     d.close();
     const db = openDb(path);
-    assert.equal(Number((db.prepare('PRAGMA user_version').get() as any).user_version), 7);
+    assert.equal(Number((db.prepare('PRAGMA user_version').get() as any).user_version), 8);   // Ф29: после 007 применяется и 008
     assert.deepEqual(db.prepare('SELECT notification_id n, status s, attempts a FROM notification_outbox ORDER BY id').all().map(r => ({ ...r })), [{ n: 1, s: 'sent', a: 1 }, { n: 2, s: 'pending', a: 0 }]);
     assert.deepEqual(db.prepare('SELECT kind, ref_id FROM parent_notifications ORDER BY id').all().map(r => ({ ...r })), [{ kind: 'thread_message', ref_id: 5 }, { kind: 'room_message', ref_id: 6 }]);
     assert.equal(db.prepare('PRAGMA foreign_key_check').all().length, 0);

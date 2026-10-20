@@ -18,7 +18,7 @@ import { ownerDashboard, readAuditPage, parsePeriod, AUDIT_DEFAULT_LIMIT } from 
 import { t, hasKey, pickLang, fromAcceptLanguage } from './i18n.ts';
 import { exportData, listConsents, revokeConsent, eraseData } from './consent.ts';
 import {
-  ErasureError, NOTE_CODES, submitRequest, listMine, parentConfirm, listAll, decide as decideRequest,
+  ErasureError, NOTE_CODES, submitRequest, listMine, parentConfirm, parentReject, listAll, decide as decideRequest,
   type ErasureRequest, type ErasureStatus, type NoteCode,
 } from './erasure.ts';
 
@@ -251,9 +251,11 @@ function buildRoutes(schedulerHealth?: () => unknown, eraser: typeof eraseData =
     ({ body: { requests: listMine(db, actor, now).map(r => serializeErasure(actor.role, r)) } }));
   add('POST', '/api/erasure-requests/:id/parent-confirm', ['parent'], ({ db, actor, now, params }) =>
     ({ body: { request: serializeErasure(actor.role, wrapErasure(() => parentConfirm(db, actor, int(params[0], 'id'), now))) } }));
+  add('POST', '/api/erasure-requests/:id/parent-reject', ['parent'], ({ db, actor, now, params }) =>
+    ({ body: { request: serializeErasure(actor.role, wrapErasure(() => parentReject(db, actor, int(params[0], 'id'), now))) } }));
   add('GET', '/api/owner/erasure-requests', ['owner'], ({ db, actor, query }) => {
     const st = query.get('status');
-    if (st !== null && !['pending_parent', 'pending_owner', 'done', 'rejected'].includes(st)) throw new HttpError(400, 'bad_request', { field: 'status' });
+    if (st !== null && !['pending_parent', 'pending_owner', 'done', 'rejected', 'rejected_by_parent'].includes(st)) throw new HttpError(400, 'bad_request', { field: 'status' });
     return { body: { requests: listAll(db, actor, (st ?? undefined) as ErasureStatus | undefined).map(r => serializeErasure(actor.role, r)) } };
   });
   add('POST', '/api/owner/erasure-requests/:id/decision', ['owner'], ({ db, actor, now, params, body }) => {

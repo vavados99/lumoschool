@@ -9,7 +9,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { audit, guard, inTx, isMinor, isParentOfChild, isUnderAdultAge, NotAvailable, ScheduleError, type Actor } from './access.ts';
 import { eraseData } from './consent.ts';
 
-export type ErasureStatus = 'pending_parent' | 'pending_owner' | 'done' | 'rejected';
+export type ErasureStatus = 'pending_parent' | 'pending_owner' | 'done' | 'rejected' | 'rejected_by_parent';
 export type ErasureRequest = {
   id: number; subject_id: number; requested_by: number; via: 'self' | 'parent' | 'owner'; status: ErasureStatus;
   created_at: string; decided_at: string | null; decided_by: number | null; identity_checked: number; note: string | null;
@@ -88,6 +88,20 @@ export function parentConfirm(db: DatabaseSync, a: Actor, requestId: number, now
   });
 }
 
+/** Ф29: родитель отклоняет заявку своего ребёнка, пока она ждёт родителя (pending_parent → rejected_by_parent). Только родитель ЭТОГО ребёнка до 18;
+ *  чужая/несуществующая — NotAvailable (404, как у confirm); уже закрытая или подтверждённая — 409 request_not_pending (повтор ничего не меняет). */
+export function parentReject(db: DatabaseSync, a: Actor, requestId: number, now = Date.now()): ErasureRequest {
+  return inTx(db, () => {
+    guard(db, a, 'erasure.parent_reject', 'erasure_request', requestId, () => a.role === 'parent');
+    const r = get(db, requestId);
+    if (!r || !isParentOfChild(db, a.id, r.subject_id, now)) return refuse(db, a, requestId);
+    if (r.status !== 'pending_parent') throw new ErasureError('request_not_pending');
+    db.prepare(`UPDATE erasure_requests SET status = 'rejected_by_parent', decided_at = datetime('now'), decided_by = ? WHERE id = ?`).run(a.id, requestId);
+    audit(db, a, 'erasure.parent_rejected', 'erasure_request', requestId, 'allowed');
+    return get(db, requestId)!;
+  });
+}
+
 /** Владелец: все заявки (опционально по статусу). */
 export function listAll(db: DatabaseSync, a: Actor, status?: ErasureStatus): ErasureRequest[] {
   guard(db, a, 'erasure.read_all', 'erasure_request', null, () => a.role === 'owner');
@@ -104,7 +118,7 @@ export function decide(db: DatabaseSync, a: Actor, requestId: number, decision: 
     guard(db, a, 'erasure.decide', 'erasure_request', requestId, () => a.role === 'owner');
     const r = get(db, requestId);
     if (!r) return refuse(db, a, requestId);
-    if (r.status === 'done' || r.status === 'rejected') throw new ErasureError('request_not_pending');
+    if (r.status === 'done' || r.status === 'rejected' || r.status === 'rejected_by_parent') throw new ErasureError('request_not_pending');
     if (decision === 'reject') {
       db.prepare(`UPDATE erasure_requests SET status = 'rejected', decided_at = datetime('now'), decided_by = ?, identity_checked = ?, note = ? WHERE id = ?`)
         .run(a.id, identityChecked ? 1 : 0, note, requestId);

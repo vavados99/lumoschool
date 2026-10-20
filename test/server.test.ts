@@ -413,6 +413,7 @@ test('таблица маршрутов и ролей совпадает с эт
     'POST /api/erase/:id owner,parent',
     // Ф28: канал просьб об удалении
     'POST /api/erasure-requests parent,student', 'GET /api/erasure-requests parent,student', 'POST /api/erasure-requests/:id/parent-confirm parent',
+    'POST /api/erasure-requests/:id/parent-reject parent',   // Ф29
     'GET /api/owner/erasure-requests owner', 'POST /api/owner/erasure-requests/:id/decision owner',
     'GET /api/notifications parent',   // Ф18
     'GET /api/export/:id owner,parent,student', 'GET /api/audit owner',
